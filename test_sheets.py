@@ -14,11 +14,13 @@ def test_connexion():
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     client = gspread.authorize(creds)
     
-    # Liste tous les sheets accessibles par le compte de service
-    all_sheets = client.list_spreadsheet_files()
-    print(f"Sheets accessibles : {len(all_sheets)}")
-    for s in all_sheets:
-        print(f"  - {s['name']} : {s['id']}")
+    sheet_id = os.environ.get("GOOGLE_SHEETS_ID")
+    sheet = client.open_by_key(sheet_id)
+    
+    worksheets = sheet.worksheets()
+    print("✅ Connexion réussie. Onglets trouvés :")
+    for ws in worksheets:
+        print(f"  - {ws.title}")
 
 if __name__ == "__main__":
     test_connexion()
