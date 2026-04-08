@@ -16,6 +16,8 @@ def test_connexion():
     
     # On ouvre par nom au lieu de l'ID
     sheet = client.open("ORANGE SUIVI")  # remplace par le nom exact de ton sheet
+    # Juste après sheet = client.open("ORANGE SUIVI")
+print(f"ID réel du sheet : {sheet.id}")
     
     worksheets = sheet.worksheets()
     print("✅ Connexion réussie. Onglets trouvés :")
