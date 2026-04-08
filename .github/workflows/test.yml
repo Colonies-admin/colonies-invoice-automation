@@ -15,10 +15,16 @@ jobs:
           python-version: '3.11'
       
       - name: Install dependencies
-        run: pip install gspread google-auth
+        run: pip install gspread google-auth requests
       
-      - name: Run test
+      - name: Run test Sheets
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
         run: python test_sheets.py
+      
+      - name: Run test Airtable
+        env:
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+          AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
+        run: python test_airtable.py
