@@ -15,9 +15,10 @@ def test_connexion():
     client = gspread.authorize(creds)
     
     sheet_id = os.environ.get("GOOGLE_SHEETS_ID")
-    sheet = client.open_by_key(sheet_id)
+    print(f"ID utilisé : {sheet_id}")
+    print(f"Longueur : {len(sheet_id)} caractères")
     
-    # Liste les onglets disponibles
+    sheet = client.open_by_key(sheet_id)
     worksheets = sheet.worksheets()
     print("✅ Connexion réussie. Onglets trouvés :")
     for ws in worksheets:
