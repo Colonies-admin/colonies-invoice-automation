@@ -14,8 +14,8 @@ def test_connexion():
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     client = gspread.authorize(creds)
     
-    sheet_id = os.environ.get("GOOGLE_SHEETS_ID")
-    sheet = client.open_by_key(sheet_id)
+    # On ouvre par nom au lieu de l'ID
+    sheet = client.open("ORANGE SUIVI")  # remplace par le nom exact de ton sheet
     
     worksheets = sheet.worksheets()
     print("✅ Connexion réussie. Onglets trouvés :")
