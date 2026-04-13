@@ -15,7 +15,7 @@ jobs:
           python-version: '3.11'
       
       - name: Install dependencies
-        run: pip install gspread google-auth requests
+        run: pip install gspread google-auth requests pdfplumber
       
       - name: Test Google Sheets
         env:
@@ -28,3 +28,6 @@ jobs:
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
           AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
         run: python test_airtable.py
+      
+      - name: Test PDF extraction
+        run: python test_pdf.py
