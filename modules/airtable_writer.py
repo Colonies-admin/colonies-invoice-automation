@@ -20,7 +20,7 @@ def find_record_by_fragment(base_id: str, table_id: str, fragment: str) -> str |
     headers = get_headers()
     
     params = {
-        "filterByFormula": f'SEARCH("{fragment}", {{Description}})',
+        "filterByFormula": f'SEARCH("{fragment}", {{Bank reference}})',
         "maxRecords": 5
     }
     
