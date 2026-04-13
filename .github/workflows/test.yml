@@ -15,7 +15,10 @@ jobs:
           python-version: '3.11'
       
       - name: Install dependencies
-        run: pip install gspread google-auth requests pdfplumber
+        run: pip install gspread google-auth requests pdfplumber playwright
+      
+      - name: Install Playwright browsers
+        run: playwright install chromium
       
       - name: Test Google Sheets
         env:
@@ -38,3 +41,9 @@ jobs:
           AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
           AIRTABLE_TABLE_ID: ${{ secrets.AIRTABLE_TABLE_ID }}
         run: python test_airtable_search.py
+      
+      - name: Test Orange scraper
+        env:
+          ORANGE_LOGIN: ${{ secrets.ORANGE_LOGIN }}
+          ORANGE_PASSWORD: ${{ secrets.ORANGE_PASSWORD }}
+        run: python test_orange.py
