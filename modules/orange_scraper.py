@@ -18,19 +18,19 @@ def download_orange_invoices(output_dir="pdfs"):
         page = context.new_page()
         page.set_default_timeout(60000)
         
-        # Connexion
         print("Connexion au portail Orange Pro...")
         page.goto("https://pro.orange.fr", wait_until="domcontentloaded")
         page.wait_for_timeout(5000)
         print("Page chargee: " + page.title())
         
-        # Login
         try:
-            page.fill('input[type="email"]', login)
+            page.wait_for_selector('#login', timeout=30000)
+            page.fill('#login', login)
             page.click('button[type="submit"]')
             page.wait_for_load_state("domcontentloaded", timeout=60000)
             page.wait_for_timeout(3000)
-            page.fill('input[type="password"]', password)
+            page.wait_for_selector('#password', timeout=30000)
+            page.fill('#password', password)
             page.click('button[type="submit"]')
             page.wait_for_load_state("domcontentloaded", timeout=60000)
             page.wait_for_timeout(3000)
@@ -40,13 +40,11 @@ def download_orange_invoices(output_dir="pdfs"):
             page.screenshot(path="debug_login.png")
             raise
         
-        # Navigation vers la liste des lignes
         print("Navigation vers les lignes...")
         page.goto("https://pro.orange.fr/espace-client/", wait_until="domcontentloaded")
         page.wait_for_timeout(5000)
         print("Page lignes chargee: " + page.url)
         
-        # Récupère toutes les lignes
         lignes = page.query_selector_all('[data-testid="line-item"]')
         print(str(len(lignes)) + " lignes trouvees")
         
