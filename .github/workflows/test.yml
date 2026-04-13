@@ -1,4 +1,4 @@
-name: Test Sheets Connection
+name: Test Connections
 
 on:
   workflow_dispatch:
@@ -17,13 +17,13 @@ jobs:
       - name: Install dependencies
         run: pip install gspread google-auth requests
       
-      - name: Run test Sheets
+      - name: Test Google Sheets
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
           GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
         run: python test_sheets.py
       
-      - name: Run test Airtable
+      - name: Test Airtable
         env:
           AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
           AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
