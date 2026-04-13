@@ -1,49 +1,124 @@
-name: Test Connections
+import os
+from playwright.sync_api import sync_playwright
 
-on:
-  workflow_dispatch:
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      
-      - name: Install dependencies
-        run: pip install gspread google-auth requests pdfplumber playwright
-      
-      - name: Install Playwright browsers
-        run: playwright install chromium
-      
-      - name: Test Google Sheets
-        env:
-          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-          GOOGLE_SHEETS_ID: ${{ secrets.GOOGLE_SHEETS_ID }}
-        run: python test_sheets.py
-      
-      - name: Test Airtable
-        env:
-          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
-          AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
-        run: python test_airtable.py
-      
-      - name: Test PDF extraction
-        run: python test_pdf.py
-      
-      - name: Test Airtable search
-        env:
-          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
-          AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
-          AIRTABLE_TABLE_ID: ${{ secrets.AIRTABLE_TABLE_ID }}
-        run: python test_airtable_search.py
-      
-      - name: Test Orange scraper
-        env:
-          ORANGE_LOGIN: ${{ secrets.ORANGE_LOGIN }}
-          ORANGE_PASSWORD: ${{ secrets.ORANGE_PASSWORD }}
-        run: python test_orange.py
+def download_orange_invoices(output_dir="pdfs"):
+    os.makedirs(output_dir, exist_ok=True)
+    
+    login = os.environ.get("ORANGE_LOGIN")
+    password = os.environ.get("ORANGE_PASSWORD")
+    
+    results = []
+    
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        page = context.new_page()
+        page.set_default_timeout(60000)
+        
+        print("Connexion au portail Orange Pro...")
+        page.goto("https://login.orange.fr", wait_until="domcontentloaded")
+        page.wait_for_timeout(5000)
+        print("Page chargee: " + page.title())
+        print("Nb iframes: " + str(len(page.frames)))
+        
+        try:
+            # Cherche dans toutes les frames
+            login_frame = None
+            for frame in page.frames:
+                print("Frame URL: " + frame.url)
+                try:
+                    el = frame.query_selector('#login')
+                    if el:
+                        login_frame = frame
+                        print("Frame login trouvee: " + frame.url)
+                        break
+                except:
+                    pass
+            
+            if not login_frame:
+                login_frame = page.main_frame
+                print("Utilisation main frame")
+            
+            login_frame.wait_for_selector('#login', timeout=30000)
+            login_frame.fill('#login', login)
+            login_frame.click('#btnSubmit')
+            page.wait_for_load_state("domcontentloaded", timeout=60000)
+            page.wait_for_timeout(3000)
+            
+            # Password - recherce dans toutes les frames
+            pwd_frame = None
+            for frame in page.frames:
+                try:
+                    el = frame.query_selector('#password')
+                    if el:
+                        pwd_frame = frame
+                        break
+                except:
+                    pass
+            
+            if not pwd_frame:
+                pwd_frame = page.main_frame
+            
+            pwd_frame.wait_for_selector('#password', timeout=30000)
+            pwd_frame.fill('#password', password)
+            pwd_frame.click('#btnSubmit')
+            page.wait_for_load_state("domcontentloaded", timeout=60000)
+            page.wait_for_timeout(3000)
+            print("Connecte. URL: " + page.url)
+            
+        except Exception as e:
+            print("Erreur login: " + str(e))
+            raise
+        
+        print("Navigation vers les lignes...")
+        page.goto("https://pro.orange.fr/espace-client/", wait_until="domcontentloaded")
+        page.wait_for_timeout(5000)
+        print("Page lignes chargee: " + page.url)
+        
+        lignes = page.query_selector_all('[data-testid="line-item"]')
+        print(str(len(lignes)) + " lignes trouvees")
+        
+        for i, ligne in enumerate(lignes):
+            try:
+                print("Traitement ligne " + str(i+1) + "/" + str(len(lignes)) + "...")
+                ligne.click()
+                page.wait_for_load_state("domcontentloaded")
+                page.wait_for_timeout(2000)
+                
+                with page.expect_download(timeout=30000) as download_info:
+                    page.click('a[href*="facture"], a[href*="invoice"], button:has-text("Telecharger")')
+                
+                download = download_info.value
+                pdf_path = os.path.join(output_dir, "facture_" + str(i+1) + ".pdf")
+                download.save_as(pdf_path)
+                
+                results.append({
+                    "index": i+1,
+                    "pdf_path": pdf_path,
+                    "status": "ok"
+                })
+                print("OK - facture_" + str(i+1) + ".pdf")
+                
+                page.go_back()
+                page.wait_for_load_state("domcontentloaded")
+                page.wait_for_timeout(2000)
+                
+            except Exception as e:
+                print("ERREUR ligne " + str(i+1) + ": " + str(e))
+                results.append({
+                    "index": i+1,
+                    "pdf_path": None,
+                    "status": "erreur",
+                    "message": str(e)
+                })
+                try:
+                    page.go_back()
+                    page.wait_for_load_state("domcontentloaded")
+                except:
+                    pass
+        
+        browser.close()
+    
+    return results
