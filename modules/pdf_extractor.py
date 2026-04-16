@@ -1,4 +1,4 @@
-import anthropic
+import google.generativeai as genai
 import base64
 import json
 import os
@@ -6,19 +6,20 @@ import os
 
 def extract_invoice_data(pdf_path: str) -> dict:
     """
-    Extrait les données clés d'une facture via Claude API.
+    Extrait les données clés d'une facture via Gemini API.
     Retourne un dict avec : numero_facture, fragment_at,
     numero_compte, adresse, date_prelevement, montant_ttc
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY manquant dans les secrets")
+        raise ValueError("GEMINI_API_KEY manquant dans les secrets")
+
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
 
     # Lecture et encodage du PDF en base64
     with open(pdf_path, "rb") as f:
-        pdf_b64 = base64.standard_b64encode(f.read()).decode("utf-8")
-
-    client = anthropic.Anthropic(api_key=api_key)
+        pdf_data = f.read()
 
     prompt = """Extrait de cette facture Orange les informations suivantes et réponds UNIQUEMENT en JSON valide, sans texte avant ou après :
 
@@ -32,34 +33,18 @@ def extract_invoice_data(pdf_path: str) -> dict:
 
 Si une information est introuvable, mets null pour ce champ."""
 
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "document",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "application/pdf",
-                            "data": pdf_b64,
-                        },
-                    },
-                    {
-                        "type": "text",
-                        "text": prompt
-                    }
-                ],
-            }
-        ],
-    )
+    response = model.generate_content([
+        {
+            "mime_type": "application/pdf",
+            "data": base64.b64encode(pdf_data).decode("utf-8")
+        },
+        prompt
+    ])
 
     # Parsing de la réponse JSON
-    response_text = message.content[0].text.strip()
+    response_text = response.text.strip()
 
-    # Nettoyage au cas où Claude ajoute des backticks
+    # Nettoyage au cas où Gemini ajoute des backticks
     if response_text.startswith("```"):
         response_text = response_text.split("```")[1]
         if response_text.startswith("json"):
