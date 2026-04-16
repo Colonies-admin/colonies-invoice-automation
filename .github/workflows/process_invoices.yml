@@ -7,9 +7,10 @@ on:
         description: "Mois à traiter (ex: AVRIL)"
         required: true
         type: string
-      pdfs:
-        description: "PDFs encodés en base64 (JSON array)"
+      dossier:
+        description: "Dossier contenant les PDFs"
         required: true
+        default: "pdfs_input"
         type: string
 
 jobs:
@@ -29,25 +30,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Decode and save PDFs
-        run: |
-          python - <<'EOF'
-          import json, base64, os
-
-          pdfs = json.loads(os.environ["PDFS_INPUT"])
-          os.makedirs("pdfs_input", exist_ok=True)
-
-          for pdf in pdfs:
-              path = os.path.join("pdfs_input", pdf["name"])
-              with open(path, "wb") as f:
-                  f.write(base64.b64decode(pdf["data"]))
-              print(f"Sauvegardé : {pdf['name']}")
-          EOF
-        env:
-          PDFS_INPUT: ${{ inputs.pdfs }}
-
       - name: Run main script
-        run: python main.py --dossier pdfs_input --mois ${{ inputs.mois }}
+        run: python main.py --dossier ${{ inputs.dossier }} --mois ${{ inputs.mois }}
         env:
           GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}
           AIRTABLE_TOKEN:      ${{ secrets.AIRTABLE_TOKEN }}
