@@ -23,7 +23,7 @@ def extract_invoice_data(pdf_path: str) -> dict:
         parties = numero_brut.split(' ')
         if len(parties) >= 2:
             trois_derniers = parties[0][-3:]
-            segment = parties[1].replace('-', '').strip()
+            segment = parties[1].replace('-', '').strip()[-3:]
             result['fragment_at'] = trois_derniers + segment
 
     # Numéro de compte internet
