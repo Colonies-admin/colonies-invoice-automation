@@ -3,9 +3,9 @@ import sys
 import argparse
 import glob
 
-from modules.sheets_reader import get_mapping
-from modules.pdf_extractor import extract_invoice_data
+from modules.sheets_reader import get_mapping, mark_as_done
 from modules.airtable_writer import find_record_by_fragment, update_record, attach_pdf
+from modules.pdf_extractor import extract_invoice_data
 
 SHEET_ID       = os.environ.get("GOOGLE_SHEET_ID")
 AIRTABLE_BASE  = os.environ.get("AIRTABLE_BASE_ID")
@@ -83,26 +83,12 @@ def process_folder(dossier: str, mois: str):
             )
             if attached:
                 print(f"    ✅ Airtable mis à jour + PDF attaché")
-                ok += 1
             else:
                 print(f"    ⚠️  Mis à jour mais PDF non attaché")
-                ok += 1
+
+            mark_as_done(SHEET_ID, mois, compte_info["row_idx"], compte_info["status_col"])
+            ok += 1
 
         except Exception as e:
             print(f"    ❌ Erreur : {e}")
             ko += 1
-
-        print()
-
-    print(f"{'='*60}")
-    print(f"  RÉSUMÉ : {ok} OK  |  {ko} erreurs  |  {len(pdfs)} total")
-    print(f"{'='*60}\n")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Automation factures Orange → Airtable")
-    parser.add_argument("--dossier", required=True, help="Chemin du dossier contenant les PDFs")
-    parser.add_argument("--mois", required=True, help="Onglet du Google Sheets à utiliser (ex: AVRIL)")
-    args = parser.parse_args()
-
-    process_folder(args.dossier, args.mois)
