@@ -11,7 +11,7 @@ SHEET_ID       = os.environ.get("GOOGLE_SHEET_ID")
 AIRTABLE_BASE  = os.environ.get("AIRTABLE_BASE_ID")
 AIRTABLE_TABLE = os.environ.get("AIRTABLE_TABLE_ID")
 
-TAG_OPS = "INT"
+TAG_OPS = "INT-INTERNET"
 NATURE  = "OPS"
 
 
@@ -85,8 +85,8 @@ def process_folder(dossier: str, mois: str):
                 print(f"    ✅ Airtable mis à jour + PDF attaché")
                 ok += 1
             else:
-                print(f"    ⚠️  Mis à jour mais erreur attach PDF")
-                ko += 1
+                print(f"    ⚠️  Mis à jour mais PDF non attaché")
+                ok += 1
 
         except Exception as e:
             print(f"    ❌ Erreur : {e}")
