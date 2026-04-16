@@ -24,19 +24,50 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
     except gspread.WorksheetNotFound:
         raise ValueError(f"Onglet '{month_tab}' introuvable dans le Google Sheets")
     
-    rows = worksheet.get_all_records(
-        expected_headers=["ADRESSE", "PROJECT CODE", "N° COMPTE INTERNET", "N° DE CONTRAT", "STATUS"]
-    )
+    all_values = worksheet.get_all_values()
+    
+    if len(all_values) < 2:
+        return {}
+    
+    # Trouver la ligne d'en-tête (première ligne non vide)
+    headers = []
+    header_row_idx = 0
+    for i, row in enumerate(all_values):
+        if any(cell.strip() for cell in row):
+            headers = [cell.strip() for cell in row]
+            header_row_idx = i
+            break
+    
+    # Trouver les index des colonnes par mot-clé
+    def find_col(keyword):
+        for i, h in enumerate(headers):
+            if keyword.lower() in h.lower():
+                return i
+        return None
+    
+    idx_compte  = find_col("compte internet")
+    idx_adresse = find_col("adresse")
+    idx_projet  = find_col("project code")
+    idx_contrat = find_col("contrat")
     
     mapping = {}
-    for row in rows:
-        compte = str(row.get("N° COMPTE INTERNET", "")).strip()
+    for row in all_values[header_row_idx + 1:]:
+        if not row:
+            continue
+        
+        def get_val(idx):
+            if idx is not None and idx < len(row):
+                return row[idx].strip()
+            return ""
+        
+        compte = get_val(idx_compte)
         if not compte:
             continue
+        
         mapping[compte] = {
-            "adresse": str(row.get("ADRESSE", "")).strip(),
-            "code_projet": str(row.get("PROJECT CODE", "")).strip(),
-            "numero_contrat": str(row.get("N° DE CONTRAT", "")).strip(),
+            "adresse":         get_val(idx_adresse),
+            "code_projet":     get_val(idx_projet),
+            "numero_contrat":  get_val(idx_contrat),
         }
     
     return mapping
