@@ -32,7 +32,7 @@ def update_record(base_id, table_id, record_id, project_code, tag_ops, nature):
     headers = get_headers()
     data = {
         "fields": {
-            "Project code": project_code,
+            "Project Code": project_code,
             "TAG OPS": tag_ops,
             "Nature": nature
         }
