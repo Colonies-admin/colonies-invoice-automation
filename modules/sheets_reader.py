@@ -26,23 +26,22 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
     
     all_values = worksheet.get_all_values()
     
-    print(f"   → Lignes brutes récupérées : {len(all_values)}")
-    print(f"   → Ligne 1 : {all_values[0] if all_values else 'vide'}")
-    print(f"   → Ligne 2 : {all_values[1] if len(all_values) > 1 else 'vide'}")
-    print(f"   → Ligne 3 : {all_values[2] if len(all_values) > 2 else 'vide'}")
-
     if len(all_values) < 2:
         return {}
     
-    # Trouver la ligne d'en-tête (première ligne non vide)
+    # Chercher la ligne qui contient "ADRESSE" comme header
     headers = []
     header_row_idx = 0
     for i, row in enumerate(all_values):
-        if any(cell.strip() for cell in row):
+        if any("adresse" in cell.lower() for cell in row):
             headers = [cell.strip() for cell in row]
             header_row_idx = i
             break
     
+    if not headers:
+        print("   → Headers introuvables !")
+        return {}
+
     print(f"   → Headers trouvés à la ligne {header_row_idx} : {headers}")
 
     # Trouver les index des colonnes par mot-clé
