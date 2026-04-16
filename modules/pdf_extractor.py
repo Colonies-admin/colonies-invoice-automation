@@ -1,23 +1,16 @@
-import google.generativeai as genai
+import google.genai as genai
 import base64
 import json
 import os
 
 
 def extract_invoice_data(pdf_path: str) -> dict:
-    """
-    Extrait les données clés d'une facture via Gemini API.
-    Retourne un dict avec : numero_facture, fragment_at,
-    numero_compte, adresse, date_prelevement, montant_ttc
-    """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise ValueError("GEMINI_API_KEY manquant dans les secrets")
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    client = genai.Client(api_key=api_key)
 
-    # Lecture et encodage du PDF en base64
     with open(pdf_path, "rb") as f:
         pdf_data = f.read()
 
@@ -33,18 +26,16 @@ def extract_invoice_data(pdf_path: str) -> dict:
 
 Si une information est introuvable, mets null pour ce champ."""
 
-    response = model.generate_content([
-        {
-            "mime_type": "application/pdf",
-            "data": base64.b64encode(pdf_data).decode("utf-8")
-        },
-        prompt
-    ])
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=[
+            genai.types.Part.from_bytes(data=pdf_data, mime_type="application/pdf"),
+            prompt
+        ]
+    )
 
-    # Parsing de la réponse JSON
     response_text = response.text.strip()
 
-    # Nettoyage au cas où Gemini ajoute des backticks
     if response_text.startswith("```"):
         response_text = response_text.split("```")[1]
         if response_text.startswith("json"):
@@ -53,8 +44,6 @@ Si une information est introuvable, mets null pour ce champ."""
 
     result = json.loads(response_text)
 
-    # Génération du fragment_at depuis le numéro de facture
-    # Règle : 3 derniers chiffres avant l'espace + segment après l'espace sans tiret
     numero = result.get("numero_facture")
     if numero:
         parties = numero.split(" ")
