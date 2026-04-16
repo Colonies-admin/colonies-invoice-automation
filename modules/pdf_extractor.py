@@ -27,7 +27,7 @@ def extract_invoice_data(pdf_path: str) -> dict:
 Si une information est introuvable, mets null pour ce champ."""
 
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-1.5-flash",
         contents=[
             genai.types.Part.from_bytes(data=pdf_data, mime_type="application/pdf"),
             prompt
