@@ -26,6 +26,11 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
     
     all_values = worksheet.get_all_values()
     
+    print(f"   → Lignes brutes récupérées : {len(all_values)}")
+    print(f"   → Ligne 1 : {all_values[0] if all_values else 'vide'}")
+    print(f"   → Ligne 2 : {all_values[1] if len(all_values) > 1 else 'vide'}")
+    print(f"   → Ligne 3 : {all_values[2] if len(all_values) > 2 else 'vide'}")
+
     if len(all_values) < 2:
         return {}
     
@@ -38,6 +43,8 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
             header_row_idx = i
             break
     
+    print(f"   → Headers trouvés à la ligne {header_row_idx} : {headers}")
+
     # Trouver les index des colonnes par mot-clé
     def find_col(keyword):
         for i, h in enumerate(headers):
@@ -49,7 +56,9 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
     idx_adresse = find_col("adresse")
     idx_projet  = find_col("project code")
     idx_contrat = find_col("contrat")
-    
+
+    print(f"   → idx_compte={idx_compte}, idx_adresse={idx_adresse}, idx_projet={idx_projet}, idx_contrat={idx_contrat}")
+
     mapping = {}
     for row in all_values[header_row_idx + 1:]:
         if not row:
@@ -65,9 +74,9 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
             continue
         
         mapping[compte] = {
-            "adresse":         get_val(idx_adresse),
-            "code_projet":     get_val(idx_projet),
-            "numero_contrat":  get_val(idx_contrat),
+            "adresse":        get_val(idx_adresse),
+            "code_projet":    get_val(idx_projet),
+            "numero_contrat": get_val(idx_contrat),
         }
     
     return mapping
