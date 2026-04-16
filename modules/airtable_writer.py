@@ -3,6 +3,9 @@ import requests
 import base64
 
 AIRTABLE_API_URL = "https://api.airtable.com/v0"
+GITHUB_TOKEN = os.environ.get("GH_PAT")
+REPO_OWNER = "Colonies-admin"
+REPO_NAME = "colonies-invoice-automation"
 
 def get_headers():
     token = os.environ.get("AIRTABLE_TOKEN")
@@ -10,6 +13,10 @@ def get_headers():
         "Authorization": f"Bearer " + token,
         "Content-Type": "application/json"
     }
+
+def get_pdf_raw_url(pdf_path):
+    filename = os.path.basename(pdf_path)
+    return f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/pdfs_input/{filename}"
 
 def find_project_record_id(base_id, project_code):
     url = AIRTABLE_API_URL + "/" + base_id + "/Projects"
@@ -58,7 +65,7 @@ def update_record(base_id, table_id, record_id, project_code, tag_ops, nature):
     if project_record_id:
         fields["Project Code"] = [project_record_id]
     else:
-        print(f"⚠️  Project record ID non trouvé pour {project_code}, champ Project Code non mis à jour")
+        print(f"⚠️  Project record ID non trouvé pour {project_code}")
 
     data = {"fields": fields}
     response = requests.patch(url, headers=headers, json=data)
@@ -67,17 +74,16 @@ def update_record(base_id, table_id, record_id, project_code, tag_ops, nature):
     return response.status_code == 200
 
 def attach_pdf(base_id, table_id, record_id, pdf_path, filename):
+    raw_url = get_pdf_raw_url(pdf_path)
+
     url = AIRTABLE_API_URL + "/" + base_id + "/" + table_id + "/" + record_id
     headers = get_headers()
-
-    with open(pdf_path, "rb") as f:
-        pdf_content = base64.b64encode(f.read()).decode("utf-8")
 
     data = {
         "fields": {
             "Document": [
                 {
-                    "url": f"data:application/pdf;base64,{pdf_content}",
+                    "url": raw_url,
                     "filename": filename
                 }
             ]
