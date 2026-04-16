@@ -1,60 +1,50 @@
-import google.genai as genai
-import base64
-import json
-import os
+import pdfplumber
+import re
 
 
 def extract_invoice_data(pdf_path: str) -> dict:
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY manquant dans les secrets")
+    """
+    Extrait les données clés d'une facture Orange.
+    Retourne un dict avec : numero_facture, fragment_at,
+    numero_compte, adresse, date_prelevement, montant_ttc
+    """
+    with pdfplumber.open(pdf_path) as pdf:
+        text = ""
+        for page in pdf.pages:
+            text += page.extract_text() + "\n"
 
-    client = genai.Client(api_key=api_key)
+    result = {}
 
-    with open(pdf_path, "rb") as f:
-        pdf_data = f.read()
-
-    prompt = """Extrait de cette facture Orange les informations suivantes et réponds UNIQUEMENT en JSON valide, sans texte avant ou après :
-
-{
-  "numero_facture": "le numéro de facture complet (ex: 01C256N449 26B8- 1C03)",
-  "numero_compte": "le numéro de compte internet",
-  "adresse": "l'adresse du site (rue et ville, sans code patrol)",
-  "date_prelevement": "la date de prélèvement au format JJ.MM.AAAA",
-  "montant_ttc": "le montant TTC total en chiffres uniquement (ex: 49.99)"
-}
-
-Si une information est introuvable, mets null pour ce champ."""
-
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-lite",
-        contents=[
-            genai.types.Part.from_bytes(data=pdf_data, mime_type="application/pdf"),
-            prompt
-        ]
-    )
-
-    response_text = response.text.strip()
-
-    if response_text.startswith("```"):
-        response_text = response_text.split("```")[1]
-        if response_text.startswith("json"):
-            response_text = response_text[4:]
-    response_text = response_text.strip()
-
-    result = json.loads(response_text)
-
-    numero = result.get("numero_facture")
-    if numero:
-        parties = numero.split(" ")
+    # Numéro de facture (ex: 01C256N449 26B8- 1C03)
+    match = re.search(r'n° de facture\s*:\s*([A-Z0-9]{10,12}\s+\d{2}[A-Z]\d+[-\s]+\d[A-Z]\d{2})', text, re.IGNORECASE)
+    if match:
+        numero_brut = match.group(1).strip()
+        result['numero_facture'] = numero_brut
+        parties = numero_brut.split(' ')
         if len(parties) >= 2:
             trois_derniers = parties[0][-3:]
-            segment = parties[1].replace("-", "").strip()
-            result["fragment_at"] = trois_derniers + segment
-        else:
-            result["fragment_at"] = None
-    else:
-        result["fragment_at"] = None
+            segment = parties[1].replace('-', '').strip()
+            result['fragment_at'] = trois_derniers + segment
+
+    # Numéro de compte internet
+    match = re.search(r'n° de compte internet\s*:\s*(\d+)', text, re.IGNORECASE)
+    if match:
+        result['numero_compte'] = match.group(1).strip()
+
+    # Date de prélèvement
+    match = re.search(r'au\s+(\d{2}\.\d{2}\.\d{4})', text)
+    if match:
+        result['date_prelevement'] = match.group(1).strip()
+
+    # Montant TTC
+    match = re.search(r'(\d+[,\.]\d{2})\s*€\s*TTC', text)
+    if match:
+        result['montant_ttc'] = match.group(1).replace(',', '.')
+
+    # Adresse
+    match = re.search(r'COLONIES\s+ETAGE 0\s+(.+?)\s+\d{5}', text)
+    if match:
+        result['adresse'] = match.group(1).strip()
 
     return result
 
