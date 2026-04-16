@@ -3,6 +3,8 @@ import sys
 import argparse
 import glob
 
+print("Script démarré", flush=True)
+
 from modules.sheets_reader import get_mapping, mark_as_done
 from modules.airtable_writer import find_record_by_fragment, update_record, attach_pdf
 from modules.pdf_extractor import extract_invoice_data
@@ -92,3 +94,18 @@ def process_folder(dossier: str, mois: str):
         except Exception as e:
             print(f"    ❌ Erreur : {e}")
             ko += 1
+
+        print()
+
+    print(f"{'='*60}")
+    print(f"  RÉSUMÉ : {ok} OK  |  {ko} erreurs  |  {len(pdfs)} total")
+    print(f"{'='*60}\n")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Automation factures Orange → Airtable")
+    parser.add_argument("--dossier", required=True, help="Chemin du dossier contenant les PDFs")
+    parser.add_argument("--mois", required=True, help="Onglet du Google Sheets à utiliser (ex: AVRIL)")
+    args = parser.parse_args()
+
+    process_folder(args.dossier, args.mois)
