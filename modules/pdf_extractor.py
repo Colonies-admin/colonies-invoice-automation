@@ -19,7 +19,7 @@ def extract_invoice_data(pdf_path: str) -> dict:
 {
   "numero_facture": "le numéro de facture complet (ex: 01C256N449 26B8- 1C03)",
   "numero_compte": "le numéro de compte internet",
-  "adresse": "l'adresse du site (rue et ville, sans code postal)",
+  "adresse": "l'adresse du site (rue et ville, sans code patrol)",
   "date_prelevement": "la date de prélèvement au format JJ.MM.AAAA",
   "montant_ttc": "le montant TTC total en chiffres uniquement (ex: 49.99)"
 }
@@ -27,7 +27,7 @@ def extract_invoice_data(pdf_path: str) -> dict:
 Si une information est introuvable, mets null pour ce champ."""
 
     response = client.models.generate_content(
-        model="gemini-1.5-flash",
+        model="gemini-2.0-flash-lite",
         contents=[
             genai.types.Part.from_bytes(data=pdf_data, mime_type="application/pdf"),
             prompt
