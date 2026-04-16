@@ -15,7 +15,7 @@ def find_project_record_id(base_id, project_code):
     url = AIRTABLE_API_URL + "/" + base_id + "/Projects"
     headers = get_headers()
     params = {
-        "filterByFormula": f'{{Name}} = "{project_code}"',
+        "filterByFormula": f'{{Project Code}} = "{project_code}"',
         "maxRecords": 1
     }
     response = requests.get(url, headers=headers, params=params)
@@ -46,18 +46,20 @@ def find_record_by_fragment(base_id, table_id, fragment):
 
 def update_record(base_id, table_id, record_id, project_code, tag_ops, nature):
     project_record_id = find_project_record_id(base_id, project_code)
-    
+
     url = AIRTABLE_API_URL + "/" + base_id + "/" + table_id + "/" + record_id
     headers = get_headers()
-    
+
     fields = {
         "TAG OPS": tag_ops,
         "Nature": nature
     }
-    
+
     if project_record_id:
         fields["Project Code"] = [project_record_id]
-    
+    else:
+        print(f"⚠️  Project record ID non trouvé pour {project_code}, champ Project Code non mis à jour")
+
     data = {"fields": fields}
     response = requests.patch(url, headers=headers, json=data)
     if response.status_code != 200:
@@ -65,17 +67,18 @@ def update_record(base_id, table_id, record_id, project_code, tag_ops, nature):
     return response.status_code == 200
 
 def attach_pdf(base_id, table_id, record_id, pdf_path, filename):
-    with open(pdf_path, "rb") as f:
-        pdf_content = base64.b64encode(f.read()).decode("utf-8")
     url = AIRTABLE_API_URL + "/" + base_id + "/" + table_id + "/" + record_id
     headers = get_headers()
+
+    with open(pdf_path, "rb") as f:
+        pdf_content = base64.b64encode(f.read()).decode("utf-8")
+
     data = {
         "fields": {
             "Document": [
                 {
-                    "filename": filename,
-                    "contentType": "application/pdf",
-                    "data": pdf_content
+                    "url": f"data:application/pdf;base64,{pdf_content}",
+                    "filename": filename
                 }
             ]
         }
