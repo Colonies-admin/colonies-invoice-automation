@@ -9,10 +9,6 @@ SCOPES = [
 ]
 
 def get_mapping(sheet_id: str, month_tab: str) -> dict:
-    """
-    Lit l'onglet du mois dans le Google Sheets et retourne
-    un dictionnaire : N° compte internet → {code_projet, adresse, numero_contrat}
-    """
     creds_json = os.environ.get("GOOGLE_CREDENTIALS")
     if not creds_json:
         raise ValueError("GOOGLE_CREDENTIALS manquant dans les secrets")
@@ -28,7 +24,9 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
     except gspread.WorksheetNotFound:
         raise ValueError(f"Onglet '{month_tab}' introuvable dans le Google Sheets")
     
-    rows = worksheet.get_all_records()
+    rows = worksheet.get_all_records(
+        expected_headers=["ADRESSE", "PROJECT CODE", "N° COMPTE INTERNET", "N° DE CONTRAT", "STATUS"]
+    )
     
     mapping = {}
     for row in rows:
