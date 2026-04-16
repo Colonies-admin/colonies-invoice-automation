@@ -1,82 +1,108 @@
-import gspread
-from google.oauth2.service_account import Credentials
 import os
-import json
+import sys
+import argparse
+import glob
 
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets.readonly",
-    "https://www.googleapis.com/auth/drive.readonly"
-]
+from modules.sheets_reader import get_mapping
+from modules.pdf_extractor import extract_invoice_data
+from modules.airtable_writer import find_record_by_fragment, update_record, attach_pdf
 
-def get_mapping(sheet_id: str, month_tab: str) -> dict:
-    creds_json = os.environ.get("GOOGLE_CREDENTIALS")
-    if not creds_json:
-        raise ValueError("GOOGLE_CREDENTIALS manquant dans les secrets")
-    
-    creds_dict = json.loads(creds_json)
-    creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-    client = gspread.authorize(creds)
-    
-    sheet = client.open_by_key(sheet_id)
-    
-    try:
-        worksheet = sheet.worksheet(month_tab)
-    except gspread.WorksheetNotFound:
-        raise ValueError(f"Onglet '{month_tab}' introuvable dans le Google Sheets")
-    
-    all_values = worksheet.get_all_values()
-    
-    print(f"   → Lignes brutes récupérées : {len(all_values)}")
-    print(f"   → Ligne 1 : {all_values[0] if all_values else 'vide'}")
-    print(f"   → Ligne 2 : {all_values[1] if len(all_values) > 1 else 'vide'}")
-    print(f"   → Ligne 3 : {all_values[2] if len(all_values) > 2 else 'vide'}")
+SHEET_ID       = os.environ.get("GOOGLE_SHEET_ID")
+AIRTABLE_BASE  = os.environ.get("AIRTABLE_BASE_ID")
+AIRTABLE_TABLE = os.environ.get("AIRTABLE_TABLE_ID")
 
-    if len(all_values) < 2:
-        return {}
-    
-    # Trouver la ligne d'en-tête (première ligne non vide)
-    headers = []
-    header_row_idx = 0
-    for i, row in enumerate(all_values):
-        if any(cell.strip() for cell in row):
-            headers = [cell.strip() for cell in row]
-            header_row_idx = i
-            break
-    
-    print(f"   → Headers trouvés à la ligne {header_row_idx} : {headers}")
+TAG_OPS = "INT"
+NATURE  = "OPS"
 
-    # Trouver les index des colonnes par mot-clé
-    def find_col(keyword):
-        for i, h in enumerate(headers):
-            if keyword.lower() in h.lower():
-                return i
-        return None
-    
-    idx_compte  = find_col("compte internet")
-    idx_adresse = find_col("adresse")
-    idx_projet  = find_col("project code")
-    idx_contrat = find_col("contrat")
 
-    print(f"   → idx_compte={idx_compte}, idx_adresse={idx_adresse}, idx_projet={idx_projet}, idx_contrat={idx_contrat}")
+def process_folder(dossier: str, mois: str):
+    print(f"\n{'='*60}")
+    print(f"  Lancement : {dossier} | Mois : {mois}")
+    print(f"{'='*60}\n")
 
-    mapping = {}
-    for row in all_values[header_row_idx + 1:]:
-        if not row:
-            continue
-        
-        def get_val(idx):
-            if idx is not None and idx < len(row):
-                return row[idx].strip()
-            return ""
-        
-        compte = get_val(idx_compte)
-        if not compte:
-            continue
-        
-        mapping[compte] = {
-            "adresse":        get_val(idx_adresse),
-            "code_projet":    get_val(idx_projet),
-            "numero_contrat": get_val(idx_contrat),
-        }
-    
-    return mapping
+    print("📋 Chargement du mapping Google Sheets...")
+    mapping = get_mapping(SHEET_ID, mois)
+    print(f"   → {len(mapping)} comptes chargés\n")
+
+    pdfs = sorted(glob.glob(os.path.join(dossier, "*.pdf")))
+    if not pdfs:
+        print(f"❌ Aucun PDF trouvé dans le dossier : {dossier}")
+        sys.exit(1)
+    print(f"📂 {len(pdfs)} PDFs trouvés\n")
+
+    ok, ko = 0, 0
+
+    for pdf_path in pdfs:
+        filename = os.path.basename(pdf_path)
+        print(f"─── {filename}")
+
+        try:
+            data = extract_invoice_data(pdf_path)
+            print(f"    ✅ Extraction OK")
+            print(f"       Facture     : {data.get('numero_facture')}")
+            print(f"       Fragment AT : {data.get('fragment_at')}")
+            print(f"       Compte      : {data.get('numero_compte')}")
+            print(f"       Montant TTC : {data.get('montant_ttc')} €")
+            print(f"       Prélèvement : {data.get('date_prelevement')}")
+
+            fragment      = data.get("fragment_at")
+            numero_compte = data.get("numero_compte")
+
+            if not fragment:
+                print(f"    ⚠️  Fragment AT introuvable - skipped")
+                ko += 1
+                continue
+
+            compte_info = mapping.get(numero_compte)
+            if not compte_info:
+                print(f"    ⚠️  Compte {numero_compte} absent du mapping Sheets - skipped")
+                ko += 1
+                continue
+
+            project_code = compte_info.get("code_projet")
+            print(f"       Project code : {project_code}")
+
+            record_id = find_record_by_fragment(AIRTABLE_BASE, AIRTABLE_TABLE, fragment)
+            if not record_id:
+                print(f"    ⚠️  Fragment '{fragment}' non trouvé dans Airtable - skipped")
+                ko += 1
+                continue
+
+            updated = update_record(
+                AIRTABLE_BASE, AIRTABLE_TABLE, record_id,
+                project_code, TAG_OPS, NATURE
+            )
+            if not updated:
+                print(f"    ❌ Erreur mise à jour Airtable")
+                ko += 1
+                continue
+
+            attached = attach_pdf(
+                AIRTABLE_BASE, AIRTABLE_TABLE, record_id,
+                pdf_path, filename
+            )
+            if attached:
+                print(f"    ✅ Airtable mis à jour + PDF attaché")
+                ok += 1
+            else:
+                print(f"    ⚠️  Mis à jour mais erreur attach PDF")
+                ko += 1
+
+        except Exception as e:
+            print(f"    ❌ Erreur : {e}")
+            ko += 1
+
+        print()
+
+    print(f"{'='*60}")
+    print(f"  RÉSUMÉ : {ok} OK  |  {ko} erreurs  |  {len(pdfs)} total")
+    print(f"{'='*60}\n")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Automation factures Orange → Airtable")
+    parser.add_argument("--dossier", required=True, help="Chemin du dossier contenant les PDFs")
+    parser.add_argument("--mois", required=True, help="Onglet du Google Sheets à utiliser (ex: AVRIL)")
+    args = parser.parse_args()
+
+    process_folder(args.dossier, args.mois)
