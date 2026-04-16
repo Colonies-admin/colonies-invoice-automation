@@ -49,7 +49,7 @@ jobs:
       - name: Run main script
         run: python main.py --dossier pdfs_input --mois ${{ inputs.mois }}
         env:
-          ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}
           AIRTABLE_TOKEN:      ${{ secrets.AIRTABLE_TOKEN }}
           AIRTABLE_BASE_ID:    ${{ secrets.AIRTABLE_BASE_ID }}
           AIRTABLE_TABLE_ID:   ${{ secrets.AIRTABLE_TABLE_ID }}
