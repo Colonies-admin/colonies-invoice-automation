@@ -11,10 +11,11 @@ def detect_fournisseur(text: str) -> str:
 
 
 def detect_energie(text: str) -> str:
-    if "gaz naturel" in text.lower():
-        return "GAS-GAS"
+    # Chercher électricité en premier pour éviter les faux positifs gaz
     if "électricité" in text.lower() or "electricite" in text.lower():
         return "ELE-ELECTRICITY"
+    if "gaz naturel" in text.lower():
+        return "GAS-GAS"
     return "ELE-ELECTRICITY"
 
 
