@@ -68,8 +68,8 @@ def extract_engie(text: str) -> dict:
         result['nature'] = "OPS"
         result['is_hq'] = False
 
-    # Numéro de facture
-    match = re.search(r'N°\s*(\d{12,15})', text)
+    # Numéro de facture — élargi à 9 chiffres minimum
+    match = re.search(r'N°\s*(\d{9,15})', text)
     if match:
         result['numero_facture'] = match.group(1).strip()
 
