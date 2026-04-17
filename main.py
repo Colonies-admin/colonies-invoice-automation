@@ -14,8 +14,6 @@ SHEET_ID       = os.environ.get("GOOGLE_SHEET_ID")
 AIRTABLE_BASE  = os.environ.get("AIRTABLE_BASE_ID")
 AIRTABLE_TABLE = os.environ.get("AIRTABLE_TABLE_ID")
 
-NATURE = "OPS"
-
 MOIS_MAP = {
     '01': 'JANVIER', '02': 'FEVRIER', '03': 'MARS', '04': 'AVRIL',
     '05': 'MAI', '06': 'JUIN', '07': 'JUILLET', '08': 'AOUT',
@@ -33,7 +31,8 @@ def get_onglet(fournisseur: str, date_prelevement: str) -> str:
 
 
 def get_done_folder(fournisseur: str, mois: str) -> str:
-    return os.path.join("pdfs_done", fournisseur.lower(), mois.lower())
+    mois_only = mois.split('_')[1].lower() if '_' in mois else mois.lower()
+    return os.path.join("pdfs_done", fournisseur.lower(), mois_only)
 
 
 def process_folder(dossier: str):
@@ -47,7 +46,6 @@ def process_folder(dossier: str):
         sys.exit(1)
     print(f"📂 {len(pdfs)} PDFs trouvés\n")
 
-    # Cache des mappings déjà chargés
     mappings_cache = {}
 
     ok, ko = 0, 0
@@ -71,7 +69,6 @@ def process_folder(dossier: str):
             print(f"       TAG OPS     : {data.get('tag_ops')}")
             print(f"       Nature      : {nature}")
 
-            # Détection automatique de l'onglet
             mois = get_onglet(fournisseur, data.get('date_prelevement', ''))
             if not mois:
                 print(f"    ⚠️  Impossible de détecter le mois - skipped")
@@ -88,7 +85,6 @@ def process_folder(dossier: str):
                 ko += 1
                 continue
 
-            # Charger le mapping si pas encore en cache
             if mois not in mappings_cache:
                 print(f"    📋 Chargement mapping {mois}...")
                 try:
@@ -101,7 +97,6 @@ def process_folder(dossier: str):
 
             mapping = mappings_cache[mois]
 
-            # Cas HQ
             if is_hq:
                 project_code = None
                 compte_info  = None
@@ -141,7 +136,6 @@ def process_folder(dossier: str):
             if compte_info:
                 mark_as_done(SHEET_ID, mois, compte_info["row_idx"], compte_info["status_col"])
 
-            # Déplacer le PDF dans pdfs_done/fournisseur/mois/
             done_folder = get_done_folder(fournisseur, mois)
             os.makedirs(done_folder, exist_ok=True)
             done_path = os.path.join(done_folder, filename)
