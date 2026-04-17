@@ -17,14 +17,21 @@ AIRTABLE_TABLE = os.environ.get("AIRTABLE_TABLE_ID")
 NATURE = "OPS"
 
 
+def get_done_folder(mois: str, fournisseur: str) -> str:
+    parts = mois.split("_")
+    if len(parts) == 2:
+        fournisseur_dir = parts[0].lower()
+        mois_dir = parts[1].lower()
+    else:
+        fournisseur_dir = fournisseur.lower()
+        mois_dir = mois.lower()
+    return os.path.join("pdfs_done", fournisseur_dir, mois_dir)
+
+
 def process_folder(dossier: str, mois: str):
     print(f"\n{'='*60}")
     print(f"  Lancement : {dossier} | Mois : {mois}")
     print(f"{'='*60}\n")
-
-    # Créer le dossier pdfs_done s'il n'existe pas
-    done_folder = dossier.replace("pdfs_input", "pdfs_done")
-    os.makedirs(done_folder, exist_ok=True)
 
     print("📋 Chargement du mapping Google Sheets...")
     mapping = get_mapping(SHEET_ID, mois)
@@ -97,10 +104,12 @@ def process_folder(dossier: str, mois: str):
 
             mark_as_done(SHEET_ID, mois, compte_info["row_idx"], compte_info["status_col"])
 
-            # Déplacer le PDF dans pdfs_done
+            # Déplacer le PDF dans pdfs_done/fournisseur/mois/
+            done_folder = get_done_folder(mois, fournisseur)
+            os.makedirs(done_folder, exist_ok=True)
             done_path = os.path.join(done_folder, filename)
             shutil.move(pdf_path, done_path)
-            print(f"    📁 PDF déplacé vers pdfs_done/")
+            print(f"    📁 PDF déplacé vers {done_folder}/")
 
             ok += 1
 
