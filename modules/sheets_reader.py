@@ -54,6 +54,8 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
         return None
 
     idx_compte  = find_col("compte internet")
+    if idx_compte is None:
+        idx_compte = find_col("ref client")
     idx_adresse = find_col("adresse")
     idx_projet  = find_col("project code")
     idx_contrat = find_col("contrat")
