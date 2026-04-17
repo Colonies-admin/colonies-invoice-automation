@@ -68,7 +68,7 @@ def extract_engie(text: str) -> dict:
         result['nature'] = "OPS"
         result['is_hq'] = False
 
-    # Numéro de facture — élargi à 9 chiffres minimum
+    # Numéro de facture
     match = re.search(r'N°\s*(\d{9,15})', text)
     if match:
         result['numero_facture'] = match.group(1).strip()
@@ -79,7 +79,7 @@ def extract_engie(text: str) -> dict:
         ref = match.group(1).replace(' ', '').strip()[:12]
         result['numero_compte'] = ref
         if result.get('numero_facture'):
-            result['fragment_at'] = ref + '-' + result['numero_facture']
+            result['fragment_at'] = ref + '-' + result['numero_facture'].zfill(12)
 
     # Date prélèvement
     mois = {
