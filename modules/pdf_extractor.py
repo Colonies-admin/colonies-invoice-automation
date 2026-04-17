@@ -59,8 +59,9 @@ def extract_engie(text: str) -> dict:
     # Type d'énergie
     result['tag_ops'] = detect_energie(text)
 
-    # Détection HQ
-    if "21 RUE DE BRUXELLES" in text.upper():
+    # Détection HQ — basée sur le lieu de consommation uniquement
+    match_lieu = re.search(r'Lieu de consommation.*?COLONIES\s+(.*?)\s+\d{5}', text, re.IGNORECASE | re.DOTALL)
+    if match_lieu and "21 RUE DE BRUXELLES" in match_lieu.group(1).upper():
         result['nature'] = "HQ"
         result['is_hq'] = True
     else:
