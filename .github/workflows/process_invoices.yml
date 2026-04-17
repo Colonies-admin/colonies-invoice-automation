@@ -3,10 +3,6 @@ name: Process Invoices
 on:
   workflow_dispatch:
     inputs:
-      mois:
-        description: "Mois à traiter (ex: ENGIE_AVRIL)"
-        required: true
-        type: string
       dossier:
         description: "Dossier contenant les PDFs"
         required: true
@@ -31,7 +27,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run main script
-        run: python main.py --dossier ${{ inputs.dossier }} --mois ${{ inputs.mois }}
+        run: python main.py --dossier ${{ inputs.dossier }}
         env:
           GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}
           AIRTABLE_TOKEN:      ${{ secrets.AIRTABLE_TOKEN }}
@@ -46,7 +42,7 @@ jobs:
           git config --global user.email "bot@livecolonies.com"
           git add pdfs_done/ || true
           git add pdfs_input/ || true
-          git diff --staged --quiet || git commit -m "✅ PDFs traités - ${{ inputs.mois }}"
+          git diff --staged --quiet || git commit -m "✅ PDFs traités automatiquement"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
