@@ -14,32 +14,41 @@ SHEET_ID       = os.environ.get("GOOGLE_SHEET_ID")
 AIRTABLE_BASE  = os.environ.get("AIRTABLE_BASE_ID")
 AIRTABLE_TABLE = os.environ.get("AIRTABLE_TABLE_ID")
 
+NATURE = "OPS"
 
-def get_done_folder(mois: str, fournisseur: str) -> str:
-    parts = mois.split("_")
-    if len(parts) == 2:
-        fournisseur_dir = parts[0].lower()
-        mois_dir = parts[1].lower()
-    else:
-        fournisseur_dir = fournisseur.lower()
-        mois_dir = mois.lower()
-    return os.path.join("pdfs_done", fournisseur_dir, mois_dir)
+MOIS_MAP = {
+    '01': 'JANVIER', '02': 'FEVRIER', '03': 'MARS', '04': 'AVRIL',
+    '05': 'MAI', '06': 'JUIN', '07': 'JUILLET', '08': 'AOUT',
+    '09': 'SEPTEMBRE', '10': 'OCTOBRE', '11': 'NOVEMBRE', '12': 'DECEMBRE'
+}
 
 
-def process_folder(dossier: str, mois: str):
+def get_onglet(fournisseur: str, date_prelevement: str) -> str:
+    try:
+        mois_num = date_prelevement.split('.')[1]
+        mois_str = MOIS_MAP.get(mois_num, 'INCONNU')
+        return f"{fournisseur}_{mois_str}"
+    except Exception:
+        return None
+
+
+def get_done_folder(fournisseur: str, mois: str) -> str:
+    return os.path.join("pdfs_done", fournisseur.lower(), mois.lower())
+
+
+def process_folder(dossier: str):
     print(f"\n{'='*60}")
-    print(f"  Lancement : {dossier} | Mois : {mois}")
+    print(f"  Lancement : {dossier}")
     print(f"{'='*60}\n")
-
-    print("📋 Chargement du mapping Google Sheets...")
-    mapping = get_mapping(SHEET_ID, mois)
-    print(f"   → {len(mapping)} comptes chargés\n")
 
     pdfs = sorted(glob.glob(os.path.join(dossier, "*.pdf")))
     if not pdfs:
         print(f"❌ Aucun PDF trouvé dans le dossier : {dossier}")
         sys.exit(1)
     print(f"📂 {len(pdfs)} PDFs trouvés\n")
+
+    # Cache des mappings déjà chargés
+    mappings_cache = {}
 
     ok, ko = 0, 0
 
@@ -62,6 +71,14 @@ def process_folder(dossier: str, mois: str):
             print(f"       TAG OPS     : {data.get('tag_ops')}")
             print(f"       Nature      : {nature}")
 
+            # Détection automatique de l'onglet
+            mois = get_onglet(fournisseur, data.get('date_prelevement', ''))
+            if not mois:
+                print(f"    ⚠️  Impossible de détecter le mois - skipped")
+                ko += 1
+                continue
+            print(f"       Onglet      : {mois}")
+
             fragment      = data.get("fragment_at")
             numero_compte = data.get("numero_compte")
             tag_ops       = data.get("tag_ops", "ELE-ELECTRICITY")
@@ -71,14 +88,27 @@ def process_folder(dossier: str, mois: str):
                 ko += 1
                 continue
 
-            # Cas HQ — pas besoin du mapping Sheets
+            # Charger le mapping si pas encore en cache
+            if mois not in mappings_cache:
+                print(f"    📋 Chargement mapping {mois}...")
+                try:
+                    mappings_cache[mois] = get_mapping(SHEET_ID, mois)
+                    print(f"       → {len(mappings_cache[mois])} comptes chargés")
+                except Exception as e:
+                    print(f"    ⚠️  Onglet {mois} introuvable dans Sheets - skipped")
+                    ko += 1
+                    continue
+
+            mapping = mappings_cache[mois]
+
+            # Cas HQ
             if is_hq:
                 project_code = None
                 compte_info  = None
             else:
                 compte_info = mapping.get(numero_compte)
                 if not compte_info:
-                    print(f"    ⚠️  Compte {numero_compte} absent du mapping Sheets - skipped")
+                    print(f"    ⚠️  Compte {numero_compte} absent du mapping - skipped")
                     ko += 1
                     continue
                 project_code = compte_info.get("code_projet")
@@ -112,7 +142,7 @@ def process_folder(dossier: str, mois: str):
                 mark_as_done(SHEET_ID, mois, compte_info["row_idx"], compte_info["status_col"])
 
             # Déplacer le PDF dans pdfs_done/fournisseur/mois/
-            done_folder = get_done_folder(mois, fournisseur)
+            done_folder = get_done_folder(fournisseur, mois)
             os.makedirs(done_folder, exist_ok=True)
             done_path = os.path.join(done_folder, filename)
             shutil.move(pdf_path, done_path)
@@ -134,7 +164,6 @@ def process_folder(dossier: str, mois: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Automation factures fournisseurs → Airtable")
     parser.add_argument("--dossier", required=True, help="Chemin du dossier contenant les PDFs")
-    parser.add_argument("--mois", required=True, help="Onglet du Google Sheets à utiliser")
     args = parser.parse_args()
 
-    process_folder(args.dossier, args.mois)
+    process_folder(args.dossier)
