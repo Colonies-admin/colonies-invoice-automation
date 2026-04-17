@@ -10,6 +10,14 @@ def detect_fournisseur(text: str) -> str:
     return "INCONNU"
 
 
+def detect_energie(text: str) -> str:
+    if "gaz naturel" in text.lower():
+        return "GAS-GAS"
+    if "électricité" in text.lower() or "electricite" in text.lower():
+        return "ELE-ELECTRICITY"
+    return "ELE-ELECTRICITY"
+
+
 def extract_orange(text: str) -> dict:
     result = {}
 
@@ -39,11 +47,16 @@ def extract_orange(text: str) -> dict:
     if match:
         result['adresse'] = match.group(1).strip()
 
+    result['tag_ops'] = "INT-INTERNET"
+
     return result
 
 
 def extract_engie(text: str) -> dict:
     result = {}
+
+    # Type d'énergie
+    result['tag_ops'] = detect_energie(text)
 
     # Numéro de facture
     match = re.search(r'N°\s*(\d{12,15})', text)
@@ -53,15 +66,17 @@ def extract_engie(text: str) -> dict:
     # Référence client
     match = re.search(r'r[eé]f[eé]rence client\s*:?\s*([\d\s]+)', text, re.IGNORECASE)
     if match:
-        ref = match.group(1).replace(' ', '').strip()
+        ref = match.group(1).replace(' ', '').strip()[:12]
         result['numero_compte'] = ref
         if result.get('numero_facture'):
             result['fragment_at'] = ref + '-' + result['numero_facture']
 
     # Date prélèvement
-    mois = {'janvier':'01','février':'02','mars':'03','avril':'04','mai':'05',
-            'juin':'06','juillet':'07','août':'08','septembre':'09',
-            'octobre':'10','novembre':'11','décembre':'12'}
+    mois = {
+        'janvier': '01', 'février': '02', 'mars': '03', 'avril': '04',
+        'mai': '05', 'juin': '06', 'juillet': '07', 'août': '08',
+        'septembre': '09', 'octobre': '10', 'novembre': '11', 'décembre': '12'
+    }
     match = re.search(r'prélevé le\s+(\d{1,2})\s+(\w+)\s+(\d{4})', text, re.IGNORECASE)
     if match:
         jour = match.group(1).zfill(2)
@@ -69,11 +84,16 @@ def extract_engie(text: str) -> dict:
         annee = match.group(3)
         mois_num = mois.get(mois_str, '00')
         result['date_prelevement'] = f"{jour}.{mois_num}.{annee}"
+    else:
+        # Facture récapitulative — pas de prélèvement
+        match = re.search(r'du\s+(\d{2})[/\.](\d{2})[/\.](\d{2,4})', text)
+        if match:
+            result['date_prelevement'] = f"{match.group(1)}.{match.group(2)}.{match.group(3)}"
 
     # Montant TTC
-    match = re.search(r'total TTC\s+([\d,\.]+)\s*€', text, re.IGNORECASE)
+    match = re.search(r'total TTC\s+([\d\s]+[,\.]\d{2})', text, re.IGNORECASE)
     if match:
-        result['montant_ttc'] = match.group(1).replace(',', '.')
+        result['montant_ttc'] = match.group(1).replace(' ', '').replace(',', '.')
 
     # Adresse lieu de consommation
     match = re.search(r'Lieu de consommation\s*:?\s*COLONIES\s+(.+?)\s+\d{5}', text, re.IGNORECASE | re.DOTALL)
