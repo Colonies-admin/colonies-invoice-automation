@@ -20,6 +20,7 @@ def detect_energie(text: str) -> str:
 
 def extract_orange(text: str) -> dict:
     result = {}
+    result['nature'] = "OPS"
 
     match = re.search(r'n° de facture\s*:\s*([A-Z0-9]{10,12}\s+\d{2}[A-Z]\d+[-\s]+\d[A-Z]\d{2})', text, re.IGNORECASE)
     if match:
@@ -58,6 +59,14 @@ def extract_engie(text: str) -> dict:
     # Type d'énergie
     result['tag_ops'] = detect_energie(text)
 
+    # Détection HQ
+    if "21 RUE DE BRUXELLES" in text.upper():
+        result['nature'] = "HQ"
+        result['is_hq'] = True
+    else:
+        result['nature'] = "OPS"
+        result['is_hq'] = False
+
     # Numéro de facture
     match = re.search(r'N°\s*(\d{12,15})', text)
     if match:
@@ -85,7 +94,6 @@ def extract_engie(text: str) -> dict:
         mois_num = mois.get(mois_str, '00')
         result['date_prelevement'] = f"{jour}.{mois_num}.{annee}"
     else:
-        # Facture récapitulative — pas de prélèvement
         match = re.search(r'du\s+(\d{2})[/\.](\d{2})[/\.](\d{2,4})', text)
         if match:
             result['date_prelevement'] = f"{match.group(1)}.{match.group(2)}.{match.group(3)}"
