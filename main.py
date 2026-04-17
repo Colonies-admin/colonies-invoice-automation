@@ -2,6 +2,7 @@ import os
 import sys
 import argparse
 import glob
+import shutil
 
 print("Script démarré", flush=True)
 
@@ -20,6 +21,10 @@ def process_folder(dossier: str, mois: str):
     print(f"\n{'='*60}")
     print(f"  Lancement : {dossier} | Mois : {mois}")
     print(f"{'='*60}\n")
+
+    # Créer le dossier pdfs_done s'il n'existe pas
+    done_folder = dossier.replace("pdfs_input", "pdfs_done")
+    os.makedirs(done_folder, exist_ok=True)
 
     print("📋 Chargement du mapping Google Sheets...")
     mapping = get_mapping(SHEET_ID, mois)
@@ -91,6 +96,12 @@ def process_folder(dossier: str, mois: str):
                 print(f"    ⚠️  Mis à jour mais PDF non attaché")
 
             mark_as_done(SHEET_ID, mois, compte_info["row_idx"], compte_info["status_col"])
+
+            # Déplacer le PDF dans pdfs_done
+            done_path = os.path.join(done_folder, filename)
+            shutil.move(pdf_path, done_path)
+            print(f"    📁 PDF déplacé vers pdfs_done/")
+
             ok += 1
 
         except Exception as e:
@@ -107,7 +118,7 @@ def process_folder(dossier: str, mois: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Automation factures fournisseurs → Airtable")
     parser.add_argument("--dossier", required=True, help="Chemin du dossier contenant les PDFs")
-    parser.add_argument("--mois", required=True, help="Onglet du Google Sheets à utiliser (ex: ENGIE_AVRIL)")
+    parser.add_argument("--mois", required=True, help="Onglet du Google Sheets à utiliser")
     args = parser.parse_args()
 
     process_folder(args.dossier, args.mois)
