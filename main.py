@@ -13,8 +13,7 @@ SHEET_ID       = os.environ.get("GOOGLE_SHEET_ID")
 AIRTABLE_BASE  = os.environ.get("AIRTABLE_BASE_ID")
 AIRTABLE_TABLE = os.environ.get("AIRTABLE_TABLE_ID")
 
-TAG_OPS = "INT-INTERNET"
-NATURE  = "OPS"
+NATURE = "OPS"
 
 
 def process_folder(dossier: str, mois: str):
@@ -40,15 +39,18 @@ def process_folder(dossier: str, mois: str):
 
         try:
             data = extract_invoice_data(pdf_path)
-            print(f"    ✅ Extraction OK")
+            fournisseur = data.get('fournisseur', 'INCONNU')
+            print(f"    ✅ Extraction OK ({fournisseur})")
             print(f"       Facture     : {data.get('numero_facture')}")
             print(f"       Fragment AT : {data.get('fragment_at')}")
             print(f"       Compte      : {data.get('numero_compte')}")
             print(f"       Montant TTC : {data.get('montant_ttc')} €")
             print(f"       Prélèvement : {data.get('date_prelevement')}")
+            print(f"       TAG OPS     : {data.get('tag_ops')}")
 
             fragment      = data.get("fragment_at")
             numero_compte = data.get("numero_compte")
+            tag_ops       = data.get("tag_ops", "ELE-ELECTRICITY")
 
             if not fragment:
                 print(f"    ⚠️  Fragment AT introuvable - skipped")
@@ -72,7 +74,7 @@ def process_folder(dossier: str, mois: str):
 
             updated = update_record(
                 AIRTABLE_BASE, AIRTABLE_TABLE, record_id,
-                project_code, TAG_OPS, NATURE
+                project_code, tag_ops, NATURE
             )
             if not updated:
                 print(f"    ❌ Erreur mise à jour Airtable")
@@ -103,9 +105,9 @@ def process_folder(dossier: str, mois: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Automation factures Orange → Airtable")
+    parser = argparse.ArgumentParser(description="Automation factures fournisseurs → Airtable")
     parser.add_argument("--dossier", required=True, help="Chemin du dossier contenant les PDFs")
-    parser.add_argument("--mois", required=True, help="Onglet du Google Sheets à utiliser (ex: AVRIL)")
+    parser.add_argument("--mois", required=True, help="Onglet du Google Sheets à utiliser (ex: ENGIE_AVRIL)")
     args = parser.parse_args()
 
     process_folder(args.dossier, args.mois)
