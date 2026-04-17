@@ -11,11 +11,13 @@ def detect_fournisseur(text: str) -> str:
 
 
 def detect_energie(text: str) -> str:
-    # Chercher électricité en premier pour éviter les faux positifs gaz
-    if "électricité" in text.lower() or "electricite" in text.lower():
-        return "ELE-ELECTRICITY"
-    if "gaz naturel" in text.lower():
-        return "GAS-GAS"
+    # Chercher dans le bloc informations client uniquement
+    match = re.search(r'(Electricité|Gaz naturel)\s*:', text, re.IGNORECASE)
+    if match:
+        if "gaz" in match.group(1).lower():
+            return "GAS-GAS"
+        else:
+            return "ELE-ELECTRICITY"
     return "ELE-ELECTRICITY"
 
 
