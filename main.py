@@ -14,8 +14,6 @@ SHEET_ID       = os.environ.get("GOOGLE_SHEET_ID")
 AIRTABLE_BASE  = os.environ.get("AIRTABLE_BASE_ID")
 AIRTABLE_TABLE = os.environ.get("AIRTABLE_TABLE_ID")
 
-NATURE = "OPS"
-
 
 def get_done_folder(mois: str, fournisseur: str) -> str:
     parts = mois.split("_")
@@ -52,6 +50,9 @@ def process_folder(dossier: str, mois: str):
         try:
             data = extract_invoice_data(pdf_path)
             fournisseur = data.get('fournisseur', 'INCONNU')
+            nature      = data.get('nature', 'OPS')
+            is_hq       = data.get('is_hq', False)
+
             print(f"    ✅ Extraction OK ({fournisseur})")
             print(f"       Facture     : {data.get('numero_facture')}")
             print(f"       Fragment AT : {data.get('fragment_at')}")
@@ -59,6 +60,7 @@ def process_folder(dossier: str, mois: str):
             print(f"       Montant TTC : {data.get('montant_ttc')} €")
             print(f"       Prélèvement : {data.get('date_prelevement')}")
             print(f"       TAG OPS     : {data.get('tag_ops')}")
+            print(f"       Nature      : {nature}")
 
             fragment      = data.get("fragment_at")
             numero_compte = data.get("numero_compte")
@@ -69,14 +71,18 @@ def process_folder(dossier: str, mois: str):
                 ko += 1
                 continue
 
-            compte_info = mapping.get(numero_compte)
-            if not compte_info:
-                print(f"    ⚠️  Compte {numero_compte} absent du mapping Sheets - skipped")
-                ko += 1
-                continue
-
-            project_code = compte_info.get("code_projet")
-            print(f"       Project code : {project_code}")
+            # Cas HQ — pas besoin du mapping Sheets
+            if is_hq:
+                project_code = None
+                compte_info  = None
+            else:
+                compte_info = mapping.get(numero_compte)
+                if not compte_info:
+                    print(f"    ⚠️  Compte {numero_compte} absent du mapping Sheets - skipped")
+                    ko += 1
+                    continue
+                project_code = compte_info.get("code_projet")
+                print(f"       Project code : {project_code}")
 
             record_id = find_record_by_fragment(AIRTABLE_BASE, AIRTABLE_TABLE, fragment)
             if not record_id:
@@ -86,7 +92,7 @@ def process_folder(dossier: str, mois: str):
 
             updated = update_record(
                 AIRTABLE_BASE, AIRTABLE_TABLE, record_id,
-                project_code, tag_ops, NATURE
+                project_code, tag_ops, nature
             )
             if not updated:
                 print(f"    ❌ Erreur mise à jour Airtable")
@@ -102,7 +108,8 @@ def process_folder(dossier: str, mois: str):
             else:
                 print(f"    ⚠️  Mis à jour mais PDF non attaché")
 
-            mark_as_done(SHEET_ID, mois, compte_info["row_idx"], compte_info["status_col"])
+            if compte_info:
+                mark_as_done(SHEET_ID, mois, compte_info["row_idx"], compte_info["status_col"])
 
             # Déplacer le PDF dans pdfs_done/fournisseur/mois/
             done_folder = get_done_folder(mois, fournisseur)
