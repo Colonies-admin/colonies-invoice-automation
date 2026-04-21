@@ -26,8 +26,8 @@ def normalise_adresse(adresse: str) -> str:
     adresse = adresse.upper().strip()
     adresse = re.sub(r'\s+', ' ', adresse)
     adresse = re.sub(r'\.\.\s*', ' ', adresse)
-    # Ignorer les mentions "Site XX" ou "ATELIER" qui ne font pas partie de l'adresse réelle
     adresse = re.sub(r'\bATELIER\b', '', adresse)
+    adresse = re.sub(r'\bPAV\b', '', adresse)
     adresse = re.sub(r'\s+', ' ', adresse).strip()
     return adresse
 
@@ -149,8 +149,7 @@ def extract_endesa(text: str) -> dict:
         if match:
             result['montant_ttc'] = match.group(1).replace(',', '.')
 
-    # Adresse électricité — accepte Site XX ou numéro PCE sur la première ligne
-    # Ne pas se fier au numéro de site (Site 19 etc.) — on prend la ligne suivante
+    # Adresse électricité — ignore Site XX ou numéro PCE sur la première ligne
     match = re.search(r'LIEUDECONSOMMATION\s*\n[^\n]+\n(.+?)\n[^\n]*\n(\d{5})(\w[\w\s]+?)France', text, re.IGNORECASE)
     if match:
         adresse_norm = normalise_adresse(match.group(1).strip())
@@ -177,13 +176,14 @@ def extract_endesa(text: str) -> dict:
             result['nature'] = "OPS"
             result['is_hq'] = False
 
-    # Clé de matching : adresse + ref contrat si disponible
+    # Clé de matching : adresse normalisée sans espaces + ref contrat si disponible
     adresse = result.get('adresse', '')
     ref_contrat = result.get('ref_contrat', '')
-    if adresse and ref_contrat:
-        result['numero_compte'] = adresse.replace(' ', '') + '_' + ref_contrat
+    adresse_cle = adresse.replace(' ', '').replace('ATELIER', '').replace('PAV', '').strip()
+    if adresse_cle and ref_contrat:
+        result['numero_compte'] = adresse_cle + '_' + ref_contrat
     else:
-        result['numero_compte'] = adresse.replace(' ', '')
+        result['numero_compte'] = adresse_cle
 
     return result
 
