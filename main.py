@@ -6,7 +6,7 @@ import shutil
 
 print("Script démarré", flush=True)
 
-from modules.sheets_reader import get_mapping, mark_as_done
+from modules.sheets_reader import get_mapping, mark_as_done, normalise_adresse
 from modules.airtable_writer import find_record_by_fragment, update_record, attach_pdf
 from modules.pdf_extractor import extract_invoice_data
 
@@ -35,6 +35,12 @@ def get_done_folder(fournisseur: str, mois: str) -> str:
     return os.path.join("pdfs_done", fournisseur.lower(), mois_only)
 
 
+def get_mapping_key(fournisseur: str, data: dict) -> str:
+    if fournisseur == "ENDESA":
+        return normalise_adresse(data.get('adresse', ''))
+    return data.get('numero_compte', '')
+
+
 def process_folder(dossier: str):
     print(f"\n{'='*60}")
     print(f"  Lancement : {dossier}")
@@ -47,7 +53,6 @@ def process_folder(dossier: str):
     print(f"📂 {len(pdfs)} PDFs trouvés\n")
 
     mappings_cache = {}
-
     ok, ko = 0, 0
 
     for pdf_path in pdfs:
@@ -63,7 +68,7 @@ def process_folder(dossier: str):
             print(f"    ✅ Extraction OK ({fournisseur})")
             print(f"       Facture     : {data.get('numero_facture')}")
             print(f"       Fragment AT : {data.get('fragment_at')}")
-            print(f"       Compte      : {data.get('numero_compte')}")
+            print(f"       Adresse     : {data.get('adresse')}")
             print(f"       Montant TTC : {data.get('montant_ttc')} €")
             print(f"       Prélèvement : {data.get('date_prelevement')}")
             print(f"       TAG OPS     : {data.get('tag_ops')}")
@@ -76,9 +81,9 @@ def process_folder(dossier: str):
                 continue
             print(f"       Onglet      : {mois}")
 
-            fragment      = data.get("fragment_at")
-            numero_compte = data.get("numero_compte")
-            tag_ops       = data.get("tag_ops", "ELE-ELECTRICITY")
+            fragment    = data.get("fragment_at")
+            tag_ops     = data.get("tag_ops", "ELE-ELECTRICITY")
+            mapping_key = get_mapping_key(fournisseur, data)
 
             if not fragment:
                 print(f"    ⚠️  Fragment AT introuvable - skipped")
@@ -89,7 +94,6 @@ def process_folder(dossier: str):
                 print(f"    📋 Chargement mapping {mois}...")
                 try:
                     mappings_cache[mois] = get_mapping(SHEET_ID, mois)
-                    print(f"       → {len(mappings_cache[mois])} comptes chargés")
                 except Exception as e:
                     print(f"    ⚠️  Onglet {mois} introuvable dans Sheets - skipped")
                     ko += 1
@@ -101,9 +105,9 @@ def process_folder(dossier: str):
                 project_code = None
                 compte_info  = None
             else:
-                compte_info = mapping.get(numero_compte)
+                compte_info = mapping.get(mapping_key)
                 if not compte_info:
-                    print(f"    ⚠️  Compte {numero_compte} absent du mapping - skipped")
+                    print(f"    ⚠️  Clé '{mapping_key}' absente du mapping - skipped")
                     ko += 1
                     continue
                 project_code = compte_info.get("code_projet")
