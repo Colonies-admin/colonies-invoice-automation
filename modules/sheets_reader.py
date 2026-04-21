@@ -20,16 +20,8 @@ def normalise_adresse(adresse: str) -> str:
     import re
     adresse = adresse.upper().strip()
     adresse = re.sub(r'\s+', ' ', adresse)
-    adresse = re.sub(r'\s*\.\.\s*', ' ', adresse)
-    replacements = {
-        ' RUE ': ' RUE ', ' AVENUE ': ' AV ', ' BOULEVARD ': ' BD ',
-        ' QUAI ': ' QU ', ' PLACE ': ' PL ', ' IMPASSE ': ' IMP ',
-        ' ALLEE ': ' ALL ', ' CHEMIN ': ' CH ',
-    }
-    for long, short in replacements.items():
-        adresse = adresse.replace(long, short)
-    adresse = re.sub(r'\s+', ' ', adresse).strip()
-    return adresse
+    adresse = re.sub(r'\.\.\s*', ' ', adresse)
+    return adresse.strip()
 
 def get_mapping(sheet_id: str, month_tab: str) -> dict:
     client = get_client()
@@ -41,7 +33,6 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
         raise ValueError(f"Onglet '{month_tab}' introuvable dans le Google Sheets")
 
     all_values = worksheet.get_all_values()
-
     print(f"   → Lignes brutes récupérées : {len(all_values)}")
 
     if len(all_values) < 2:
@@ -67,11 +58,9 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
                 return i
         return None
 
-    # Détection du type de mapping selon le fournisseur
     idx_compte  = find_col("compte internet")
     if idx_compte is None:
         idx_compte = find_col("ref client")
-    # Pour Endesa — matching par adresse
     is_endesa = idx_compte is None
 
     idx_adresse = find_col("adresse")
@@ -93,11 +82,11 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
             return ""
 
         if is_endesa:
-            # Clé = adresse normalisée
             adresse_raw = get_val(idx_adresse)
             if not adresse_raw:
                 continue
-            cle = normalise_adresse(adresse_raw)
+            # Supprimer tous les espaces pour matcher avec extraction pdfplumber
+            cle = adresse_raw.upper().replace(' ', '')
         else:
             cle = get_val(idx_compte)
             if not cle:
