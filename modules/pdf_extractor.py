@@ -26,7 +26,10 @@ def normalise_adresse(adresse: str) -> str:
     adresse = adresse.upper().strip()
     adresse = re.sub(r'\s+', ' ', adresse)
     adresse = re.sub(r'\.\.\s*', ' ', adresse)
-    return adresse.strip()
+    # Ignorer les mentions "Site XX" ou "ATELIER" qui ne font pas partie de l'adresse réelle
+    adresse = re.sub(r'\bATELIER\b', '', adresse)
+    adresse = re.sub(r'\s+', ' ', adresse).strip()
+    return adresse
 
 
 def extract_orange(text: str) -> dict:
@@ -146,8 +149,9 @@ def extract_endesa(text: str) -> dict:
         if match:
             result['montant_ttc'] = match.group(1).replace(',', '.')
 
-    # Adresse électricité
-    match = re.search(r'LIEUDECONSOMMATION\s*\n\d+[^\n]*\n(.+?)\n[^\n]*\n(\d{5})(\w[\w\s]+?)France', text, re.IGNORECASE)
+    # Adresse électricité — accepte Site XX ou numéro PCE sur la première ligne
+    # Ne pas se fier au numéro de site (Site 19 etc.) — on prend la ligne suivante
+    match = re.search(r'LIEUDECONSOMMATION\s*\n[^\n]+\n(.+?)\n[^\n]*\n(\d{5})(\w[\w\s]+?)France', text, re.IGNORECASE)
     if match:
         adresse_norm = normalise_adresse(match.group(1).strip())
         if "21RUEDEBRUXELLES" in adresse_norm.replace(" ", ""):
