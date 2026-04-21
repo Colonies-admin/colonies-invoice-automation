@@ -119,6 +119,15 @@ def extract_endesa(text: str) -> dict:
     if result.get('numero_facture'):
         result['fragment_at'] = result['numero_facture']
 
+    # Référence compte de contrat
+    match = re.search(r'RÉFÉRENCECOMPTEDECONTRAT\s*\n(\d+)', text, re.IGNORECASE)
+    if not match:
+        match = re.search(r'RÉFÉRENCE COMPTE DE CONTRAT\s*\n?(\d+)', text, re.IGNORECASE)
+    if not match:
+        match = re.search(r'REFERENCECOMPTEDECONTRAT\s*\n(\d+)', text, re.IGNORECASE)
+    if match:
+        result['ref_contrat'] = match.group(1).strip()
+
     # Date prélèvement
     match = re.search(r'pr[eé]lev[eé]\s+le\s+(\d{2})/(\d{2})/(\d{4})', text, re.IGNORECASE)
     if match:
@@ -133,12 +142,11 @@ def extract_endesa(text: str) -> dict:
     if match:
         result['montant_ttc'] = match.group(1).replace(' ', '').replace(',', '.')
     else:
-        # Gaz
         match = re.search(r'Total\s+TTC\s+([\d,\.]+)\s+Eur', text, re.IGNORECASE)
         if match:
             result['montant_ttc'] = match.group(1).replace(',', '.')
 
-    # Adresse électricité — on garde seulement l'adresse (groupe 1), pas la ville
+    # Adresse électricité
     match = re.search(r'LIEUDECONSOMMATION\s*\n\d+[^\n]*\n(.+?)\n[^\n]*\n(\d{5})(\w[\w\s]+?)France', text, re.IGNORECASE)
     if match:
         adresse_norm = normalise_adresse(match.group(1).strip())
@@ -150,7 +158,7 @@ def extract_endesa(text: str) -> dict:
             result['is_hq'] = False
             result['adresse'] = adresse_norm
     else:
-        # Adresse gaz — on garde seulement l'adresse (groupe 1), pas la ville
+        # Adresse gaz
         match = re.search(r'Adressedefourniture:\d+\s*\n(.+?)-\s*(\d{5})(.+?)France', text, re.IGNORECASE)
         if match:
             adresse_norm = normalise_adresse(match.group(1).strip())
@@ -165,7 +173,14 @@ def extract_endesa(text: str) -> dict:
             result['nature'] = "OPS"
             result['is_hq'] = False
 
-    result['numero_compte'] = result.get('adresse', '')
+    # Clé de matching : adresse + ref contrat si disponible
+    adresse = result.get('adresse', '')
+    ref_contrat = result.get('ref_contrat', '')
+    if adresse and ref_contrat:
+        result['numero_compte'] = adresse.replace(' ', '') + '_' + ref_contrat
+    else:
+        result['numero_compte'] = adresse.replace(' ', '')
+
     return result
 
 
