@@ -15,20 +15,18 @@ def detect_fournisseur(text: str) -> str:
 
 
 def detect_energie(text: str) -> str:
-    match = re.search(r'(Electricité|Gaz naturel|FACTURE DE GAZ|FACTURE ELECTRICITÉ)\s*', text, re.IGNORECASE)
-    if match:
-        if "gaz" in match.group(1).lower():
-            return "GAS-GAS"
-        else:
-            return "ELE-ELECTRICITY"
+    if "FACTUREDEGAZ" in text.upper().replace(" ", "") or "FACTURE DE GAZ" in text.upper():
+        return "GAS-GAS"
+    if "FACTUREELECTRICITE" in text.upper().replace(" ", "") or "FACTURE ELECTRICITÉ" in text.upper():
+        return "ELE-ELECTRICITY"
     return "ELE-ELECTRICITY"
 
 
 def normalise_adresse(adresse: str) -> str:
     adresse = adresse.upper().strip()
     adresse = re.sub(r'\s+', ' ', adresse)
-    adresse = re.sub(r'\s*\.\.\s*', ' ', adresse)
-    adresse = re.sub(r'\s+', ' ', adresse).strip()
+    adresse = re.sub(r'\.\.\s*', ' ', adresse)
+    adresse = adresse.strip()
     return adresse
 
 
@@ -109,34 +107,44 @@ def extract_endesa(text: str) -> dict:
     result = {}
     result['tag_ops'] = detect_energie(text)
 
-    match = re.search(r'N°\s*DE\s*FACTURE\s*\n(\d+)', text, re.IGNORECASE)
+    # Numéro facture électricité : N°DEFACTURE\n20/02/2026 001001092316
+    match = re.search(r'N°DEFACTURE\s*\n\d{2}/\d{2}/\d{4}\s+(\d+)', text, re.IGNORECASE)
     if match:
         result['numero_facture'] = match.group(1).strip().lstrip('0')
     else:
-        match = re.search(r'Facture\s*n[°º]\s*(\d+)', text, re.IGNORECASE)
+        # Gaz : Facturenº 1001099748
+        match = re.search(r'Facture\s*n[°º]\s+(\d+)', text, re.IGNORECASE)
         if match:
             result['numero_facture'] = match.group(1).strip().lstrip('0')
 
     if result.get('numero_facture'):
         result['fragment_at'] = result['numero_facture']
 
-    match = re.search(r'pr[eé]lev[eé]\s+le\s+(\d{2})[/\.](\d{2})[/\.](\d{4})', text, re.IGNORECASE)
+    # Date prélèvement
+    match = re.search(r'pr[eé]lev[eé]\s+le\s+(\d{2})/(\d{2})/(\d{4})', text, re.IGNORECASE)
     if match:
         result['date_prelevement'] = f"{match.group(1)}.{match.group(2)}.{match.group(3)}"
     else:
-        match = re.search(r"Date\s+d['']échéance\s+(\d{2})[/\.](\d{2})[/\.](\d{4})", text, re.IGNORECASE)
+        match = re.search(r"Date\s*d.échéance\s+(\d{2})/(\d{2})/(\d{4})", text, re.IGNORECASE)
         if match:
             result['date_prelevement'] = f"{match.group(1)}.{match.group(2)}.{match.group(3)}"
 
-    match = re.search(r'(?:Total TTC|MONTANT TOTAL\s*TTC\s*[AÀ]\s*PAYER)\s*[\n\s]*(\d[\d\s]*[,\.]\d{2})', text, re.IGNORECASE)
+    # Montant TTC électricité
+    match = re.search(r'MONTANTTOTAL\s*\nTTCAPAYER\s*\n([\d\s,\.]+)\s*€', text, re.IGNORECASE)
     if match:
         result['montant_ttc'] = match.group(1).replace(' ', '').replace(',', '.')
+    else:
+        # Gaz
+        match = re.search(r'Total\s+TTC\s+([\d,\.]+)\s+Eur', text, re.IGNORECASE)
+        if match:
+            result['montant_ttc'] = match.group(1).replace(',', '.')
 
-    match = re.search(r'LIEU DE CONSOMMATION\s*\n\s*\d+\s*\n(.+?)\s+\d{5}\s+(.+?)\s+France', text, re.IGNORECASE)
+    # Adresse électricité : ligne PCE, puis adresse, puis ligne TVA, puis CP+ville
+    match = re.search(r'LIEUDECONSOMMATION\s*\n\d+[^\n]*\n(.+?)\n[^\n]*\n(\d{5})(\w[\w\s]+?)France', text, re.IGNORECASE)
     if match:
-        adresse_brute = match.group(1).strip() + ' ' + match.group(2).strip()
+        adresse_brute = match.group(1).strip() + ' ' + match.group(3).strip()
         adresse_norm = normalise_adresse(adresse_brute)
-        if "21 RUE DE BRUXELLES" in adresse_norm:
+        if "21RUEDEBRUXELLES" in adresse_norm.replace(" ", ""):
             result['nature'] = "HQ"
             result['is_hq'] = True
         else:
@@ -144,11 +152,12 @@ def extract_endesa(text: str) -> dict:
             result['is_hq'] = False
             result['adresse'] = adresse_norm
     else:
-        match = re.search(r'Adresse de fourniture\s*:\s*\d+\s*\n(.+?)\s+-\s*\d{5}\s*-\s*(.+?)\s+France', text, re.IGNORECASE)
+        # Gaz : Adressedefourniture:<PCE>\n<adresse>-<CP><ville>France
+        match = re.search(r'Adressedefourniture:\d+\s*\n(.+?)-\s*(\d{5})(.+?)France', text, re.IGNORECASE)
         if match:
-            adresse_brute = match.group(1).strip()
+            adresse_brute = match.group(1).strip() + ' ' + match.group(3).strip()
             adresse_norm = normalise_adresse(adresse_brute)
-            if "21 RUE DE BRUXELLES" in adresse_norm:
+            if "21RUEDEBRUXELLES" in adresse_norm.replace(" ", ""):
                 result['nature'] = "HQ"
                 result['is_hq'] = True
             else:
@@ -165,11 +174,18 @@ def extract_endesa(text: str) -> dict:
 
 def extract_invoice_data(pdf_path: str) -> dict:
     with pdfplumber.open(pdf_path) as pdf:
+        # Pour Endesa on n'utilise que la page 1 pour éviter les interférences
         text = ""
-        for page in pdf.pages:
+        for i, page in enumerate(pdf.pages):
             extracted = page.extract_text()
             if extracted:
                 text += extracted + "\n"
+                if i == 0:
+                    fournisseur_check = detect_fournisseur(extracted)
+                    if fournisseur_check == "ENDESA":
+                        # Pour Endesa on garde seulement la page 1
+                        text = extracted
+                        break
 
     fournisseur = detect_fournisseur(text)
     result = {'fournisseur': fournisseur}
