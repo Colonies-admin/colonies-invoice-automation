@@ -16,6 +16,21 @@ def get_client():
     creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
     return gspread.authorize(creds)
 
+def normalise_adresse(adresse: str) -> str:
+    import re
+    adresse = adresse.upper().strip()
+    adresse = re.sub(r'\s+', ' ', adresse)
+    adresse = re.sub(r'\s*\.\.\s*', ' ', adresse)
+    replacements = {
+        ' RUE ': ' RUE ', ' AVENUE ': ' AV ', ' BOULEVARD ': ' BD ',
+        ' QUAI ': ' QU ', ' PLACE ': ' PL ', ' IMPASSE ': ' IMP ',
+        ' ALLEE ': ' ALL ', ' CHEMIN ': ' CH ',
+    }
+    for long, short in replacements.items():
+        adresse = adresse.replace(long, short)
+    adresse = re.sub(r'\s+', ' ', adresse).strip()
+    return adresse
+
 def get_mapping(sheet_id: str, month_tab: str) -> dict:
     client = get_client()
     sheet = client.open_by_key(sheet_id)
@@ -32,7 +47,6 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
     if len(all_values) < 2:
         return {}
 
-    # Chercher la ligne qui contient "ADRESSE" comme header
     headers = []
     header_row_idx = 0
     for i, row in enumerate(all_values):
@@ -53,15 +67,20 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
                 return i
         return None
 
+    # Détection du type de mapping selon le fournisseur
     idx_compte  = find_col("compte internet")
     if idx_compte is None:
         idx_compte = find_col("ref client")
+    # Pour Endesa — matching par adresse
+    is_endesa = idx_compte is None
+
     idx_adresse = find_col("adresse")
     idx_projet  = find_col("project code")
     idx_contrat = find_col("contrat")
     idx_status  = find_col("status")
 
     print(f"   → idx_compte={idx_compte}, idx_adresse={idx_adresse}, idx_projet={idx_projet}, idx_contrat={idx_contrat}, idx_status={idx_status}")
+    print(f"   → Mode matching : {'ADRESSE (Endesa)' if is_endesa else 'COMPTE'}")
 
     mapping = {}
     for row_idx, row in enumerate(all_values[header_row_idx + 1:], start=header_row_idx + 2):
@@ -73,11 +92,18 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
                 return row[idx].strip()
             return ""
 
-        compte = get_val(idx_compte)
-        if not compte:
-            continue
+        if is_endesa:
+            # Clé = adresse normalisée
+            adresse_raw = get_val(idx_adresse)
+            if not adresse_raw:
+                continue
+            cle = normalise_adresse(adresse_raw)
+        else:
+            cle = get_val(idx_compte)
+            if not cle:
+                continue
 
-        mapping[compte] = {
+        mapping[cle] = {
             "adresse":        get_val(idx_adresse),
             "code_projet":    get_val(idx_projet),
             "numero_contrat": get_val(idx_contrat),
@@ -85,6 +111,7 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
             "status_col":     idx_status
         }
 
+    print(f"       → {len(mapping)} comptes chargés")
     return mapping
 
 
