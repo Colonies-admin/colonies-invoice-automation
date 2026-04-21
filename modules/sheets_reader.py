@@ -58,15 +58,15 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
                 return i
         return None
 
-    idx_compte  = find_col("compte internet")
+    idx_compte   = find_col("compte internet")
     if idx_compte is None:
         idx_compte = find_col("ref client")
-    is_endesa = idx_compte is None
+    is_endesa    = idx_compte is None
 
-    idx_adresse = find_col("adresse")
-    idx_projet  = find_col("project code")
-    idx_contrat = find_col("contrat")
-    idx_status  = find_col("status")
+    idx_adresse  = find_col("adresse")
+    idx_projet   = find_col("project code")
+    idx_contrat  = find_col("contrat")
+    idx_status   = find_col("status")
 
     print(f"   → idx_compte={idx_compte}, idx_adresse={idx_adresse}, idx_projet={idx_projet}, idx_contrat={idx_contrat}, idx_status={idx_status}")
     print(f"   → Mode matching : {'ADRESSE (Endesa)' if is_endesa else 'COMPTE'}")
@@ -82,11 +82,17 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
             return ""
 
         if is_endesa:
-            adresse_raw = get_val(idx_adresse)
+            adresse_raw  = get_val(idx_adresse)
             if not adresse_raw:
                 continue
-            # Supprimer tous les espaces pour matcher avec extraction pdfplumber
-            cle = adresse_raw.upper().replace(' ', '')
+            adresse_norm = adresse_raw.upper().replace(' ', '')
+            ref_contrat  = get_val(idx_contrat)
+
+            # Clé avec ref contrat si disponible, sinon adresse seule
+            if ref_contrat:
+                cle = adresse_norm + '_' + ref_contrat
+            else:
+                cle = adresse_norm
         else:
             cle = get_val(idx_compte)
             if not cle:
