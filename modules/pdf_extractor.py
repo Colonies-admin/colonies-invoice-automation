@@ -26,8 +26,7 @@ def normalise_adresse(adresse: str) -> str:
     adresse = adresse.upper().strip()
     adresse = re.sub(r'\s+', ' ', adresse)
     adresse = re.sub(r'\.\.\s*', ' ', adresse)
-    adresse = adresse.strip()
-    return adresse
+    return adresse.strip()
 
 
 def extract_orange(text: str) -> dict:
@@ -107,12 +106,12 @@ def extract_endesa(text: str) -> dict:
     result = {}
     result['tag_ops'] = detect_energie(text)
 
-    # Numéro facture électricité : N°DEFACTURE\n20/02/2026 001001092316
+    # Numéro facture électricité
     match = re.search(r'N°DEFACTURE\s*\n\d{2}/\d{2}/\d{4}\s+(\d+)', text, re.IGNORECASE)
     if match:
         result['numero_facture'] = match.group(1).strip().lstrip('0')
     else:
-        # Gaz : Facturenº 1001099748
+        # Gaz
         match = re.search(r'Facture\s*n[°º]\s+(\d+)', text, re.IGNORECASE)
         if match:
             result['numero_facture'] = match.group(1).strip().lstrip('0')
@@ -139,11 +138,10 @@ def extract_endesa(text: str) -> dict:
         if match:
             result['montant_ttc'] = match.group(1).replace(',', '.')
 
-    # Adresse électricité : ligne PCE, puis adresse, puis ligne TVA, puis CP+ville
+    # Adresse électricité — on garde seulement l'adresse (groupe 1), pas la ville
     match = re.search(r'LIEUDECONSOMMATION\s*\n\d+[^\n]*\n(.+?)\n[^\n]*\n(\d{5})(\w[\w\s]+?)France', text, re.IGNORECASE)
     if match:
-        adresse_brute = match.group(1).strip() + ' ' + match.group(3).strip()
-        adresse_norm = normalise_adresse(adresse_brute)
+        adresse_norm = normalise_adresse(match.group(1).strip())
         if "21RUEDEBRUXELLES" in adresse_norm.replace(" ", ""):
             result['nature'] = "HQ"
             result['is_hq'] = True
@@ -152,11 +150,10 @@ def extract_endesa(text: str) -> dict:
             result['is_hq'] = False
             result['adresse'] = adresse_norm
     else:
-        # Gaz : Adressedefourniture:<PCE>\n<adresse>-<CP><ville>France
+        # Adresse gaz — on garde seulement l'adresse (groupe 1), pas la ville
         match = re.search(r'Adressedefourniture:\d+\s*\n(.+?)-\s*(\d{5})(.+?)France', text, re.IGNORECASE)
         if match:
-            adresse_brute = match.group(1).strip() + ' ' + match.group(3).strip()
-            adresse_norm = normalise_adresse(adresse_brute)
+            adresse_norm = normalise_adresse(match.group(1).strip())
             if "21RUEDEBRUXELLES" in adresse_norm.replace(" ", ""):
                 result['nature'] = "HQ"
                 result['is_hq'] = True
@@ -174,7 +171,6 @@ def extract_endesa(text: str) -> dict:
 
 def extract_invoice_data(pdf_path: str) -> dict:
     with pdfplumber.open(pdf_path) as pdf:
-        # Pour Endesa on n'utilise que la page 1 pour éviter les interférences
         text = ""
         for i, page in enumerate(pdf.pages):
             extracted = page.extract_text()
@@ -183,7 +179,6 @@ def extract_invoice_data(pdf_path: str) -> dict:
                 if i == 0:
                     fournisseur_check = detect_fournisseur(extracted)
                     if fournisseur_check == "ENDESA":
-                        # Pour Endesa on garde seulement la page 1
                         text = extracted
                         break
 
