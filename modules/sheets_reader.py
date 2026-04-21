@@ -2,6 +2,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import os
 import json
+import re
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -17,14 +18,17 @@ def get_client():
     return gspread.authorize(creds)
 
 def normalise_adresse(adresse: str) -> str:
-    import re
     adresse = adresse.upper().strip()
     adresse = re.sub(r'\s+', ' ', adresse)
     adresse = re.sub(r'\.\.\s*', ' ', adresse)
     return adresse.strip()
 
 def clean_adresse_key(adresse: str) -> str:
-    return adresse.upper().replace(' ', '').replace('ATELIER', '').replace('PAV', '').replace('1ET', '').strip()
+    adresse = adresse.upper()
+    for mot in ['ATELIER', 'PAV', '1ET', '2ET', 'RDC', 'BAT', 'BATIMENT']:
+        adresse = re.sub(r'\b' + mot + r'\b', '', adresse)
+    adresse = adresse.replace(' ', '')
+    return adresse.strip()
 
 def get_mapping(sheet_id: str, month_tab: str) -> dict:
     client = get_client()
