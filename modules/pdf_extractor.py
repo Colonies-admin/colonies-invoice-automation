@@ -26,8 +26,8 @@ def normalise_adresse(adresse: str) -> str:
     adresse = adresse.upper().strip()
     adresse = re.sub(r'\s+', ' ', adresse)
     adresse = re.sub(r'\.\.\s*', ' ', adresse)
-    for mot in ['ATELIER', 'PAV', '1ET', '2ET', 'RDC', 'BAT', 'BATIMENT']:
-        adresse = re.sub(r'\b' + mot + r'\b', '', adresse)
+    for mot in ['ATELIER', 'PAV', '1ET', '2ET', 'RDC', 'BATIMENT', 'BAT']:
+        adresse = adresse.replace(mot, '')
     adresse = re.sub(r'\s+', ' ', adresse).strip()
     return adresse
 
