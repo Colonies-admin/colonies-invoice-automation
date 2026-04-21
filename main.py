@@ -6,7 +6,7 @@ import shutil
 
 print("Script démarré", flush=True)
 
-from modules.sheets_reader import get_mapping, mark_as_done, normalise_adresse
+from modules.sheets_reader import get_mapping, mark_as_done, find_or_create_endesa_line
 from modules.airtable_writer import find_record_by_fragment, update_record, attach_pdf
 from modules.pdf_extractor import extract_invoice_data
 
@@ -33,12 +33,6 @@ def get_onglet(fournisseur: str, date_prelevement: str) -> str:
 def get_done_folder(fournisseur: str, mois: str) -> str:
     mois_only = mois.split('_')[1].lower() if '_' in mois else mois.lower()
     return os.path.join("pdfs_done", fournisseur.lower(), mois_only)
-
-
-def get_mapping_key(fournisseur: str, data: dict) -> str:
-    if fournisseur == "ENDESA":
-        return normalise_adresse(data.get('adresse', ''))
-    return data.get('numero_compte', '')
 
 
 def process_folder(dossier: str):
@@ -83,7 +77,6 @@ def process_folder(dossier: str):
 
             fragment    = data.get("fragment_at")
             tag_ops     = data.get("tag_ops", "ELE-ELECTRICITY")
-            mapping_key = get_mapping_key(fournisseur, data)
 
             if not fragment:
                 print(f"    ⚠️  Fragment AT introuvable - skipped")
@@ -104,10 +97,22 @@ def process_folder(dossier: str):
             if is_hq:
                 project_code = None
                 compte_info  = None
-            else:
-                compte_info = mapping.get(mapping_key)
+            elif fournisseur == "ENDESA":
+                adresse     = data.get('adresse', '')
+                ref_contrat = data.get('ref_contrat', '')
+                compte_info = find_or_create_endesa_line(
+                    SHEET_ID, mois, adresse, ref_contrat, mapping
+                )
                 if not compte_info:
-                    print(f"    ⚠️  Clé '{mapping_key}' absente du mapping - skipped")
+                    ko += 1
+                    continue
+                project_code = compte_info.get("code_projet")
+                print(f"       Project code : {project_code}")
+            else:
+                numero_compte = data.get("numero_compte", "")
+                compte_info = mapping.get(numero_compte)
+                if not compte_info:
+                    print(f"    ⚠️  Compte {numero_compte} absent du mapping - skipped")
                     ko += 1
                     continue
                 project_code = compte_info.get("code_projet")
