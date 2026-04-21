@@ -1,3 +1,4 @@
+# sheets_reader.py
 import gspread
 from google.oauth2.service_account import Credentials
 import os
@@ -26,7 +27,7 @@ def normalise_adresse(adresse: str) -> str:
 def clean_adresse_key(adresse: str) -> str:
     adresse = adresse.upper()
     for mot in ['ATELIER', 'PAV', '1ET', '2ET', 'RDC', 'BAT', 'BATIMENT']:
-        adresse = re.sub(r'\b' + mot + r'\b', '', adresse)
+        adresse = adresse.replace(mot, '')
     adresse = adresse.replace(' ', '')
     return adresse.strip()
 
@@ -109,11 +110,101 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
             "code_projet":    get_val(idx_projet),
             "numero_contrat": get_val(idx_contrat),
             "row_idx":        row_idx,
-            "status_col":     idx_status
+            "status_col":     idx_status,
+            "adresse_cle":    clean_adresse_key(get_val(idx_adresse)) if is_endesa else None,
         }
 
     print(f"       → {len(mapping)} comptes chargés")
     return mapping
+
+
+def find_or_create_endesa_line(sheet_id: str, month_tab: str, adresse: str, ref_contrat: str, mapping: dict) -> dict:
+    """
+    Pour Endesa :
+    - Si adresse+contrat déjà dans mapping → retourne la ligne
+    - Si adresse seule trouvée sans contrat → met à jour la ref contrat et retourne la ligne
+    - Si adresse avec contrat différent → crée une nouvelle ligne avec même project code
+    - Si adresse inconnue → skipe
+    """
+    adresse_cle = clean_adresse_key(adresse)
+    cle_complete = adresse_cle + '_' + ref_contrat if ref_contrat else adresse_cle
+
+    # Cas 1 : ligne exacte trouvée
+    if cle_complete in mapping:
+        return mapping[cle_complete]
+
+    # Cas 2 : adresse seule trouvée sans ref contrat
+    if adresse_cle in mapping:
+        ligne = mapping[adresse_cle]
+        if ref_contrat:
+            print(f"       📝 Ajout ref contrat {ref_contrat} sur ligne existante ({adresse})")
+            try:
+                client = get_client()
+                sheet = client.open_by_key(sheet_id)
+                worksheet = sheet.worksheet(month_tab)
+                # Trouver la colonne contrat
+                headers = worksheet.row_values(1)
+                if len(headers) < 2:
+                    headers = worksheet.row_values(2)
+                idx_contrat = next((i+1 for i, h in enumerate(headers) if 'contrat' in h.lower()), None)
+                if idx_contrat:
+                    worksheet.update_cell(ligne['row_idx'], idx_contrat, ref_contrat)
+                    # Mettre à jour le mapping en mémoire
+                    mapping[cle_complete] = {**ligne, 'numero_contrat': ref_contrat}
+                    del mapping[adresse_cle]
+                    return mapping[cle_complete]
+            except Exception as e:
+                print(f"       ⚠️  Erreur mise à jour ref contrat : {e}")
+        return ligne
+
+    # Cas 3 : adresse avec contrat différent → chercher une ligne avec même adresse
+    lignes_meme_adresse = [v for k, v in mapping.items() if v.get('adresse_cle') == adresse_cle]
+    if lignes_meme_adresse:
+        project_code = lignes_meme_adresse[0]['code_projet']
+        print(f"       📝 Nouveau contrat {ref_contrat} pour {adresse} → Project Code {project_code} — création ligne")
+        try:
+            client = get_client()
+            sheet = client.open_by_key(sheet_id)
+            worksheet = sheet.worksheet(month_tab)
+            headers = worksheet.row_values(1)
+            if len(headers) < 2:
+                headers = worksheet.row_values(2)
+
+            new_row = [''] * len(headers)
+            for i, h in enumerate(headers):
+                h_low = h.lower()
+                if 'adresse' in h_low:
+                    new_row[i] = adresse
+                elif 'project' in h_low:
+                    new_row[i] = project_code
+                elif 'contrat' in h_low:
+                    new_row[i] = ref_contrat
+                elif 'status' in h_low:
+                    new_row[i] = False
+
+            worksheet.append_row(new_row)
+            all_values = worksheet.get_all_values()
+            new_row_idx = len(all_values)
+            status_col = next((i for i, h in enumerate(headers) if 'status' in h.lower()), None)
+
+            new_entry = {
+                "adresse":        adresse,
+                "code_projet":    project_code,
+                "numero_contrat": ref_contrat,
+                "row_idx":        new_row_idx,
+                "status_col":     status_col,
+                "adresse_cle":    adresse_cle,
+            }
+            mapping[cle_complete] = new_entry
+            print(f"       ✅ Nouvelle ligne créée (ligne {new_row_idx})")
+            return new_entry
+        except Exception as e:
+            print(f"       ❌ Erreur création ligne : {e}")
+            return None
+
+    # Cas 4 : adresse inconnue
+    print(f"       ⚠️  Adresse '{adresse}' inconnue dans le mapping - skipped")
+    return None
 
 
 def mark_as_done(sheet_id: str, month_tab: str, row_idx: int, status_col: int):
