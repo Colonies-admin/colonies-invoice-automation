@@ -184,6 +184,11 @@ def extract_totalenergies(text: str, filename: str = "") -> dict:
     result = {}
     text_upper = text.upper().replace(" ", "")
 
+    if "RE1_" in filename:
+        print("=== TEXTE BRUT RE1 ===")
+        print(text[:3000])
+        print("=== FIN ===")
+
     # --- Détection échéancier GAZ ---
     is_echeancier = (
         "CHEANCIER" in text_upper
