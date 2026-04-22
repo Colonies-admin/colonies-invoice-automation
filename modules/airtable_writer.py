@@ -141,7 +141,7 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
     return records[0]["id"], pc
 
 def update_record(base_id, table_id, record_id, project_code, tag_ops, nature):
-    project_record_id = find_project_record_id(base_id, project_code)
+    project_record_id = find_project_record_id(base_id, project_code) if project_code else None
     url = f"{AIRTABLE_API_URL}/{base_id}/{table_id}/{record_id}"
     headers = get_headers()
     fields = {
@@ -150,8 +150,6 @@ def update_record(base_id, table_id, record_id, project_code, tag_ops, nature):
     }
     if project_record_id:
         fields["Project Code"] = [project_record_id]
-    else:
-        print(f"⚠️  Project record ID non trouvé pour {project_code}")
     response = requests.patch(url, headers=headers, json={"fields": fields})
     if response.status_code != 200:
         print(f"Erreur update: {response.status_code} {response.text}")
