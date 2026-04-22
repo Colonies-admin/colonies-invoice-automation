@@ -179,12 +179,17 @@ def extract_endesa(text: str) -> dict:
     return result
 
 
-def extract_totalenergies(text: str) -> dict:
+def extract_totalenergies(text: str, filename: str = "") -> dict:
     result = {}
     text_upper = text.upper().replace(" ", "")
 
     # --- Détection échéancier GAZ ---
-    is_echeancier = "CHEANCIER" in text_upper and "GAZ" in text_upper
+    is_echeancier = (
+        "CHEANCIER" in text_upper
+        or "MENSUALIT" in text_upper
+        or filename.startswith("RE1_")
+        or "TABLEAU DE MES MENSUALIT" in text.upper()
+    )
     result['is_echeancier'] = is_echeancier
 
     # --- Type énergie ---
@@ -263,7 +268,7 @@ def extract_totalenergies(text: str) -> dict:
     else:
         # Format page 3 ELE : "Adresse du site\nCOLONIES\n99B QUAI WINSTON\n94210 ST MAUR"
         match = re.search(
-            r'Adresse du site\s*\nCOLONIES\s*\n([^\n]+)\n(?:[^\n]+\n)?(\d{5})\s+([^\n]+)',
+            r'Adresse du site\s*\nCOLONIES\s*\n([^\n€]+)\n(?:[^\n€]+\n)?(\d{5})\s+([^\n€]+)',
             text, re.IGNORECASE
         )
         if match:
@@ -271,14 +276,19 @@ def extract_totalenergies(text: str) -> dict:
         else:
             # Format page 3 GAZ : "COLONIES\n37 RUE DES ROSIERS\nPAV\n94230 CACHAN"
             match = re.search(
-                r'COLONIES\s*\n([^\n]+)\n(?:[A-Z]{2,}[^\n]*\n)?(\d{5})\s+([^\n]+)',
+                r'Adresse du site\s*\nCOLONIES\s*\n([^\n€]+)\n(\d{5})\s+([^\n€]+)',
                 text, re.IGNORECASE
             )
+            if not match:
+                match = re.search(
+                    r'COLONIES\s*\n([^\n€]+)\n(?:[A-Z]{2,}[^\n€]*\n)?(\d{5})\s+([^\n€]+)',
+                    text, re.IGNORECASE
+                )
             if match:
                 adresse_conso = f"{match.group(1).strip()} {match.group(3).strip()}"
             else:
                 # Fallback tableau page 2 : "94210 ST MAUR,99B QUAI WINSTON CHURCHILL"
-                match = re.search(r'\d{5}\s+[^,\n]+,([^\n]+)', text, re.IGNORECASE)
+                match = re.search(r'\d{5}\s+[^,\n]+,([^\n€]+)', text, re.IGNORECASE)
                 if match:
                     adresse_conso = match.group(1).strip()
 
@@ -302,6 +312,8 @@ def extract_totalenergies(text: str) -> dict:
 
 
 def extract_invoice_data(pdf_path: str) -> dict:
+    filename = os.path.basename(pdf_path).upper()
+
     with pdfplumber.open(pdf_path) as pdf:
         text = ""
         for i, page in enumerate(pdf.pages):
@@ -324,7 +336,7 @@ def extract_invoice_data(pdf_path: str) -> dict:
     elif fournisseur == "ENDESA":
         result.update(extract_endesa(text))
     elif fournisseur == "TOTALENERGIES":
-        result.update(extract_totalenergies(text))
+        result.update(extract_totalenergies(text, filename))
     else:
         print(f"    ⚠️  Fournisseur non reconnu")
 
