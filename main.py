@@ -62,7 +62,7 @@ def mark_status(compte_info, project_code_at, sheet_id, mois, adresse_conso=""):
         for e in compte_info:
             if not e.get('_used'):
                 e_adresse = e.get('adresse_cle', '') or e.get('adresse', '').upper().replace(" ", "")
-                if e_adresse and adresse_key.startswith(e_adresse[:8]):
+                if e_adresse and adresse_key.startswith(e_adresse[:10]):
                     e['_used'] = True
                     entry_to_mark = e
                     break
@@ -176,12 +176,24 @@ def process_folder(dossier: str):
 
             if fournisseur == "TOTALENERGIES":
                 numero_client = data.get('numero_client', '')
+                adresse_conso_pdf = data.get('adresse_consommation', '').upper().replace(' ', '')
                 compte_info = find_totalenergies_entry(mapping, numero_client, tag_ops)
                 if not compte_info and not is_hq:
                     ko += 1
                     continue
                 if compte_info:
-                    entry = compte_info[0] if isinstance(compte_info, list) else compte_info
+                    if isinstance(compte_info, list):
+                        # Cherche la bonne entrée par adresse conso
+                        best_entry = None
+                        if adresse_conso_pdf:
+                            for e in compte_info:
+                                e_adresse = e.get('adresse_cle', '') or e.get('adresse', '').upper().replace(' ', '')
+                                if e_adresse and adresse_conso_pdf.startswith(e_adresse[:10]):
+                                    best_entry = e
+                                    break
+                        entry = best_entry if best_entry else compte_info[0]
+                    else:
+                        entry = compte_info
                     project_code = entry.get("code_projet")
                     print(f"       Project code : {project_code}")
 
