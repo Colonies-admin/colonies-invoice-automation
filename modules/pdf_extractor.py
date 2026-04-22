@@ -113,12 +113,6 @@ def extract_endesa(text: str) -> dict:
     result = {}
     result['tag_ops'] = detect_energie(text)
 
-    # DEBUG temporaire
-    if "ETOILE" in text.upper() or "COUSINS" in text.upper():
-        print("=== TEXTE BRUT ENDESA ===")
-        print(text[:2000])
-        print("=== FIN ===")
-
     match = re.search(r'N°DEFACTURE\s*\n\d{2}/\d{2}/\d{4}\s+(\d+)', text, re.IGNORECASE)
     if match:
         result['numero_facture'] = match.group(1).strip().lstrip('0')
@@ -300,7 +294,8 @@ def extract_totalenergies(text: str, filename: str = "") -> dict:
             if match:
                 adresse_conso = f"{match.group(1).strip()} {match.group(3).strip()}"
     else:
-        # Format page 3 ELE : "Adresse du site\nCOLONIES\n99B QUAI WINSTON\n94210 ST MAUR"
+        # Format page 3 ELE/GAZ : "Adresse du site\nCOLONIES\n204 RUE DU FAUBOURG\n59800 LILLE"
+        # On cherche UNIQUEMENT après le label "Adresse du site" pour éviter l'adresse de facturation
         match = re.search(
             r'Adresse du site\s*\nCOLONIES\s*\n([^\n€]+)\n(?:[^\n€]+\n)?(\d{5})\s+([^\n€]+)',
             text, re.IGNORECASE
@@ -308,20 +303,15 @@ def extract_totalenergies(text: str, filename: str = "") -> dict:
         if match:
             adresse_conso = f"{match.group(1).strip()} {match.group(3).strip()}"
         else:
-            # Format page 3 GAZ
+            # Format sans ligne intermédiaire
             match = re.search(
                 r'Adresse du site\s*\nCOLONIES\s*\n([^\n€]+)\n(\d{5})\s+([^\n€]+)',
                 text, re.IGNORECASE
             )
-            if not match:
-                match = re.search(
-                    r'COLONIES\s*\n([^\n€]+)\n(?:[A-Z]{2,}[^\n€]*\n)?(\d{5})\s+([^\n€]+)',
-                    text, re.IGNORECASE
-                )
             if match:
                 adresse_conso = f"{match.group(1).strip()} {match.group(3).strip()}"
             else:
-                # Fallback tableau page 2
+                # Fallback tableau page 2 uniquement (pas COLONIES seul qui peut matcher facturation)
                 match = re.search(r'\d{5}\s+[^,\n]+,([^\n€]+)', text, re.IGNORECASE)
                 if match:
                     adresse_conso = match.group(1).strip()
