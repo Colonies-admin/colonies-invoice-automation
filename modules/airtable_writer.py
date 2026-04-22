@@ -56,12 +56,11 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
     """
     Matching TotalEnergies.
     Bank reference format : "Prelevement TotalEnergies Electricite et Gaz France-Reference client XXXXXXX"
-    Si plusieurs lignes pour le même N° client (ex: Orsay ×2), affine par montant TTC.
+    Si plusieurs lignes pour le même N° client, affine par montant TTC.
     """
     url = f"{AIRTABLE_API_URL}/{base_id}/{table_id}"
     headers = get_headers()
 
-    # Cherche toutes les lignes avec ce N° client dans la bank reference
     params = {
         "filterByFormula": f'SEARCH("{numero_client}", {{Bank reference}})',
         "maxRecords": 10
@@ -72,6 +71,11 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
         return None
 
     records = response.json().get("records", [])
+
+    # DEBUG temporaire — à retirer après
+    for r in records:
+        print(f"       DEBUG fields: {r.get('fields', {})}")
+
     if not records:
         print(f"       ⚠️  Aucune ligne trouvée pour N° client {numero_client}")
         return None
@@ -79,7 +83,6 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
     if len(records) == 1:
         return records[0]["id"]
 
-    # Plusieurs lignes → affiner par montant TTC
     try:
         montant_float = float(str(montant_ttc).replace(',', '.'))
     except (ValueError, TypeError):
@@ -88,7 +91,6 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
 
     for record in records:
         fields = record.get("fields", {})
-        # Le montant peut être dans un champ "Amount", "Montant", ou "Amount (€)"
         for field_name in ["Montant TTC", "Amount", "Montant", "Amount (€)", "Debit"]:
             val = fields.get(field_name)
             if val is not None:
@@ -99,7 +101,6 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
                 except (ValueError, TypeError):
                     continue
 
-    # Fallback : retourner le premier si aucun match par montant
     print(f"       ⚠️  Pas de match exact par montant {montant_float}€ — retour première ligne")
     return records[0]["id"]
 
