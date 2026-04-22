@@ -149,8 +149,8 @@ def extract_endesa(text: str) -> dict:
         if match:
             result['montant_ttc'] = match.group(1).replace(',', '.')
 
-    # Adresse électricité — ignore Site XX ou numéro PCE
-    match = re.search(r'LIEUDECONSOMMATION\s*\n[^\n]+\n(.+?)\n[^\n]*\n(\d{5})(\w[\w\s]+?)France', text, re.IGNORECASE)
+    # Adresse électricité — prend simplement la ligne après le numéro PCE/Site XX
+    match = re.search(r'LIEUDECONSOMMATION\s*\n[^\n]+\n([^\n]+)', text, re.IGNORECASE)
     if match:
         adresse_norm = normalise_adresse(match.group(1).strip())
         if "21RUEDEBRUXELLES" in adresse_norm.replace(" ", ""):
@@ -161,6 +161,7 @@ def extract_endesa(text: str) -> dict:
             result['is_hq'] = False
             result['adresse'] = adresse_norm
     else:
+        # Adresse gaz
         match = re.search(r'Adressedefourniture:\d+\s*\n(.+?)-\s*(\d{5})(.+?)France', text, re.IGNORECASE)
         if match:
             adresse_norm = normalise_adresse(match.group(1).strip())
