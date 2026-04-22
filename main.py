@@ -180,8 +180,9 @@ def process_folder(dossier: str):
             if fournisseur == "TOTALENERGIES":
                 numero_client = data.get('numero_client', '')
                 montant_ttc   = data.get('montant_ttc', '')
+                date_prel     = data.get('date_prelevement', '')
                 record_id = find_record_by_client_and_amount(
-                    AIRTABLE_BASE, AIRTABLE_TABLE, numero_client, montant_ttc
+                    AIRTABLE_BASE, AIRTABLE_TABLE, numero_client, montant_ttc, date_prel
                 )
             else:
                 fragment = data.get("fragment_at")
