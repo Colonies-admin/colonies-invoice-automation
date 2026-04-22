@@ -21,11 +21,16 @@ MOIS_MAP = {
 }
 
 
+FOURNISSEUR_ONGLET = {
+    "TOTALENERGIES": "TOTAL",
+}
+
 def get_onglet(fournisseur: str, date_prelevement: str) -> str:
     try:
         mois_num = date_prelevement.split('.')[1]
         mois_str = MOIS_MAP.get(mois_num, 'INCONNU')
-        return f"{fournisseur}_{mois_str}"
+        prefix = FOURNISSEUR_ONGLET.get(fournisseur, fournisseur)
+        return f"{prefix}_{mois_str}"
     except Exception:
         return None
 
