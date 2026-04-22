@@ -34,9 +34,9 @@ def clean_adresse_key(adresse: str) -> str:
     adresse = adresse.replace('/', '')
     # Normaliser les espaces avant les abréviations
     adresse = re.sub(r'\s+', ' ', adresse).strip()
-    # Normaliser abréviations avec ou sans espaces autour
+    # Normaliser abréviations même collées
+    adresse = re.sub(r'AVE(?=DE|DU|DES|LA|LE|LES|L\'|[A-Z])', 'AVENUE', adresse)
     adresse = re.sub(r'\bAVE\b', 'AVENUE', adresse)
-    adresse = re.sub(r'(?<!\w)AVE(?!\w)', 'AVENUE', adresse)
     adresse = re.sub(r'\bBD\b', 'BOULEVARD', adresse)
     adresse = re.sub(r'\bIMP\b', 'IMPASSE', adresse)
     adresse = re.sub(r'\bSQ\b', 'SQUARE', adresse)
