@@ -89,7 +89,7 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
     for record in records:
         fields = record.get("fields", {})
         # Le montant peut être dans un champ "Amount", "Montant", ou "Amount (€)"
-        for field_name in ["Amount", "Montant", "Amount (€)", "Debit"]:
+        for field_name in ["Montant TTC", "Amount", "Montant", "Amount (€)", "Debit"]:
             val = fields.get(field_name)
             if val is not None:
                 try:
