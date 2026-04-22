@@ -113,6 +113,12 @@ def extract_endesa(text: str) -> dict:
     result = {}
     result['tag_ops'] = detect_energie(text)
 
+    # DEBUG temporaire
+    if "ETOILE" in text.upper() or "COUSINS" in text.upper():
+        print("=== TEXTE BRUT ENDESA ===")
+        print(text[:2000])
+        print("=== FIN ===")
+
     match = re.search(r'N°DEFACTURE\s*\n\d{2}/\d{2}/\d{4}\s+(\d+)', text, re.IGNORECASE)
     if match:
         result['numero_facture'] = match.group(1).strip().lstrip('0')
