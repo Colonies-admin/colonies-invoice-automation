@@ -54,19 +54,16 @@ def find_record_by_fragment(base_id, table_id, fragment):
 def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_ttc, date_prelevement):
     """
     Matching TotalEnergies.
-    Bank reference : "Prelevement TotalEnergies Electricite et Gaz France-Reference client XXXXXXX"
-    Filtre par N° client + mois/année du prélèvement pour éviter les ambiguïtés historiques.
-    Affine par montant TTC (valeur absolue) si plusieurs résultats.
-    date_prelevement format : "08.04.2026"
+    Retourne un tuple (record_id, project_code_value) pour permettre
+    d'identifier la bonne ligne Sheets quand plusieurs lignes ont le même N° client.
+    project_code_value est extrait du champ 'project code value' d'Airtable.
     """
     url = f"{AIRTABLE_API_URL}/{base_id}/{table_id}"
     headers = get_headers()
 
-    # Extraire année et mois pour filtrer sur Payment date
     try:
         parts = date_prelevement.split('.')
         jour, mois, annee = parts[0], parts[1], parts[2]
-        # Format Airtable Payment date : "2026-04-08"
         date_debut = f"{annee}-{mois}-01"
         date_fin   = f"{annee}-{mois}-30"
         filtre = (
@@ -77,8 +74,8 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
             f')'
         )
     except Exception:
-        # Fallback sans filtre date
         filtre = f'SEARCH("{numero_client}", {{Bank reference}})'
+        mois, annee = '??', '????'
 
     params = {
         "filterByFormula": filtre,
@@ -87,24 +84,45 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
     response = requests.get(url, headers=headers, params=params)
     if response.status_code != 200:
         print(f"Erreur recherche client: {response.status_code} {response.text}")
-        return None
+        return None, None
 
     records = response.json().get("records", [])
 
     if not records:
         print(f"       ⚠️  Aucune ligne trouvée pour N° client {numero_client} en {mois}/{annee}")
+        return None, None
+
+    def get_project_code(record):
+        """Extrait le project code depuis le champ 'project code value' ou 'Code analytique'."""
+        fields = record.get("fields", {})
+        # Essaie d'abord 'project code value' (liste)
+        pcv = fields.get("project code value")
+        if pcv and isinstance(pcv, list) and len(pcv) > 0:
+            return pcv[0]
+        # Fallback sur Code analytique : "01-0029ELE" → "01-029"
+        ca = fields.get("Code analytique", "")
+        if ca and len(ca) >= 6:
+            try:
+                parts = ca.split('-')
+                if len(parts) >= 2:
+                    num = parts[1][:3]
+                    return f"01-{num}"
+            except Exception:
+                pass
         return None
 
     if len(records) == 1:
-        print(f"       ✅ Match unique pour N° client {numero_client} en {mois}/{annee}")
-        return records[0]["id"]
+        pc = get_project_code(records[0])
+        print(f"       ✅ Match unique pour N° client {numero_client} en {mois}/{annee} (project: {pc})")
+        return records[0]["id"], pc
 
-    # Plusieurs résultats → affiner par montant TTC (valeur absolue)
+    # Plusieurs résultats → affiner par montant TTC
     try:
         montant_float = abs(float(str(montant_ttc).replace(',', '.')))
     except (ValueError, TypeError):
         print(f"       ⚠️  Montant invalide '{montant_ttc}' — retour première ligne")
-        return records[0]["id"]
+        pc = get_project_code(records[0])
+        return records[0]["id"], pc
 
     for record in records:
         fields = record.get("fields", {})
@@ -112,13 +130,15 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
         if val is not None:
             try:
                 if abs(abs(float(val)) - montant_float) < 0.02:
-                    print(f"       ✅ Match par montant {montant_float}€ → record {record['id']}")
-                    return record["id"]
+                    pc = get_project_code(record)
+                    print(f"       ✅ Match par montant {montant_float}€ → record {record['id']} (project: {pc})")
+                    return record["id"], pc
             except (ValueError, TypeError):
                 continue
 
     print(f"       ⚠️  Pas de match exact par montant {montant_float}€ — retour première ligne")
-    return records[0]["id"]
+    pc = get_project_code(records[0])
+    return records[0]["id"], pc
 
 def update_record(base_id, table_id, record_id, project_code, tag_ops, nature):
     project_record_id = find_project_record_id(base_id, project_code)
