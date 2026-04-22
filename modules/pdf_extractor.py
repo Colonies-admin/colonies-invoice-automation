@@ -26,7 +26,12 @@ def normalise_adresse(adresse: str) -> str:
     adresse = adresse.upper().strip()
     adresse = re.sub(r'\s+', ' ', adresse)
     adresse = re.sub(r'\.\.\s*', ' ', adresse)
-    for mot in ['ATELIER', 'PAV', '1ET', '2ET', 'RDC', 'BATIMENT', 'BAT']:
+    # Couper à la première virgule
+    adresse = adresse.split(',')[0]
+    # Couper au tiret (avec ou sans espaces) — supprime logement/rep/etc.
+    adresse = re.split(r'\s*-\s*', adresse)[0]
+    # Supprimer les suffixes parasites
+    for mot in ['ATELIER', 'PAV', '1ET', '2ET', 'RDC', 'BATIMENT', 'BAT', 'LOGEMENT', '1ER']:
         adresse = adresse.replace(mot, '')
     adresse = re.sub(r'\s+', ' ', adresse).strip()
     return adresse
@@ -122,11 +127,7 @@ def extract_endesa(text: str) -> dict:
         result['fragment_at'] = result['numero_facture']
 
     # Référence compte de contrat
-    match = re.search(r'RÉFÉRENCECOMPTEDECONTRAT\s*\n(\d+)', text, re.IGNORECASE)
-    if not match:
-        match = re.search(r'RÉFÉRENCE COMPTE DE CONTRAT\s*\n?(\d+)', text, re.IGNORECASE)
-    if not match:
-        match = re.search(r'REFERENCECOMPTEDECONTRAT\s*\n(\d+)', text, re.IGNORECASE)
+    match = re.search(r'COMPTEDECONTRAT\s*\n(\d+)', text, re.IGNORECASE)
     if match:
         result['ref_contrat'] = match.group(1).strip()
 
