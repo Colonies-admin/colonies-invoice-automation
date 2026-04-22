@@ -294,31 +294,29 @@ def extract_totalenergies(text: str, filename: str = "") -> dict:
             if match:
                 adresse_conso = f"{match.group(1).strip()} {match.group(3).strip()}"
     else:
-        # Format page 3 ELE/GAZ : "Adresse du site\nCOLONIES\n204 RUE DU FAUBOURG\n59800 LILLE"
-        # On cherche UNIQUEMENT après le label "Adresse du site" pour éviter l'adresse de facturation
+        # Format page 3 pdfplumber : colonnes sur même ligne
+        # "Adresse du site Tarif...\nCOLONIES Segment...\n15 RUE DES ILES Raccordement...\n31500 TOULOUSE Option..."
         match = re.search(
-            r'Adresse du site\s*\nCOLONIES\s*\n([^\n€]+)\n(?:[^\n€]+\n)?(\d{5})\s+([^\n€]+)',
+            r'Adresse du site[^\n]*\nCOLONIES[^\n]*\n([^\n]+?)\s+(?:Raccordement|Segment|Option|Horizon|Profil|Zone|Tarif)[^\n]*\n(\d{5})\s+([^\s\n]+)',
             text, re.IGNORECASE
         )
         if match:
             adresse_conso = f"{match.group(1).strip()} {match.group(3).strip()}"
         else:
-            # Format sans ligne intermédiaire
+            # Format page 3 simple : "Adresse du site\nCOLONIES\n15 RUE DES ILES\n31500 TOULOUSE"
             match = re.search(
-                r'Adresse du site\s*\nCOLONIES\s*\n([^\n€]+)\n(\d{5})\s+([^\n€]+)',
+                r'Adresse du site[^\n]*\nCOLONIES\s*\n([^\n€]+)\n(\d{5})\s+([^\n€]+)',
                 text, re.IGNORECASE
             )
             if match:
                 adresse_conso = f"{match.group(1).strip()} {match.group(3).strip()}"
             else:
-                # Fallback tableau page 2 : "59800 LILLE,204 RUE DU FAUBOURG DE ROUBAIX"
-                match = re.search(r'\d{5}\s+[^,\n]+,([^\n€]+)', text, re.IGNORECASE)
+                # Fallback tableau page 2 : "31500 TOULOUSE,15 RUE DES\nILES"
+                match = re.search(r'\d{5}\s+([^,\n]+),([^\n€]+)', text, re.IGNORECASE)
                 if match:
-                    adresse_conso = match.group(1).strip()
-
-    # Nettoyer l'adresse : supprimer tout ce qui suit un montant (ex: "15 RUE DES ILES 10,00")
-    if adresse_conso:
-        adresse_conso = re.sub(r'\s+\d+[,\.]\d+.*$', '', adresse_conso).strip()
+                    ville = match.group(1).strip()
+                    adresse = re.sub(r'\s+\d+[,\.]\d+.*$', '', match.group(2).strip()).strip()
+                    adresse_conso = f"{adresse} {ville}"
 
     result['adresse_consommation'] = adresse_conso
 
