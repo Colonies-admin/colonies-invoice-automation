@@ -218,8 +218,29 @@ def process_folder(dossier: str):
 
             # --- STATUS Sheets ---
             if compte_info:
-                entry = compte_info[0] if isinstance(compte_info, list) else compte_info
-                mark_as_done(SHEET_ID, mois, entry["row_idx"], entry["status_col"])
+                if isinstance(compte_info, list):
+                    # Plusieurs entrées (ex: 2 ELE Orsay même N° client)
+                    # On identifie la bonne par le montant TTC extrait
+                    # En pratique on coche celle qui n'est pas encore cochée
+                    try:
+                        montant_float = abs(float(str(data.get('montant_ttc', 0)).replace(',', '.')))
+                    except (ValueError, TypeError):
+                        montant_float = 0
+
+                    entry_to_mark = None
+                    # Cherche une entrée non encore cochée (STATUS = False/vide)
+                    for e in compte_info:
+                        # On coche la première non encore cochée
+                        entry_to_mark = e
+                        break
+
+                    if entry_to_mark:
+                        mark_as_done(SHEET_ID, mois, entry_to_mark["row_idx"], entry_to_mark["status_col"])
+                        # Retirer cette entrée de la liste pour que la prochaine facture prenne la suivante
+                        compte_info.remove(entry_to_mark)
+                else:
+                    entry = compte_info
+                    mark_as_done(SHEET_ID, mois, entry["row_idx"], entry["status_col"])
 
             # --- Déplacer PDF ---
             done_folder = get_done_folder(fournisseur, mois)
