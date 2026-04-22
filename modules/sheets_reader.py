@@ -25,10 +25,21 @@ def normalise_adresse(adresse: str) -> str:
 
 def clean_adresse_key(adresse: str) -> str:
     adresse = adresse.upper()
+    # Supprimer les suffixes parasites
     for mot in ['ATELIER', 'PAV', '1ET', '2ET', 'RDC', 'BAT', 'BATIMENT', 'LOGEMENT', '1ER']:
         adresse = adresse.replace(mot, '')
     adresse = adresse.split(',')[0]
     adresse = re.split(r'\s*-\s*', adresse)[0]
+    # Supprimer les slashes (5/7 → 57)
+    adresse = adresse.replace('/', '')
+    # Normaliser les espaces avant les abréviations
+    adresse = re.sub(r'\s+', ' ', adresse).strip()
+    # Normaliser abréviations avec ou sans espaces autour
+    adresse = re.sub(r'\bAVE\b', 'AVENUE', adresse)
+    adresse = re.sub(r'(?<!\w)AVE(?!\w)', 'AVENUE', adresse)
+    adresse = re.sub(r'\bBD\b', 'BOULEVARD', adresse)
+    adresse = re.sub(r'\bIMP\b', 'IMPASSE', adresse)
+    adresse = re.sub(r'\bSQ\b', 'SQUARE', adresse)
     adresse = adresse.replace(' ', '')
     return adresse.strip()
 
