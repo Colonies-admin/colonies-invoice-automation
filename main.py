@@ -41,11 +41,11 @@ def get_done_folder(fournisseur: str, mois: str) -> str:
     return os.path.join("pdfs_done", fournisseur.lower(), mois_only)
 
 
-def mark_status(compte_info, project_code_at, sheet_id, mois):
+def mark_status(compte_info, project_code_at, sheet_id, mois, adresse_conso=""):
     """
     Coche le STATUS dans le Sheets.
-    Si compte_info est une liste, utilise le project_code retourné par Airtable
-    pour identifier la bonne ligne Sheets à cocher.
+    Utilise l'adresse de consommation pour identifier la bonne ligne
+    quand plusieurs lignes ont le même N° client et type.
     """
     if not compte_info:
         return
@@ -56,15 +56,26 @@ def mark_status(compte_info, project_code_at, sheet_id, mois):
 
     entry_to_mark = None
 
-    # Si on a un project code depuis Airtable, on s'en sert pour trouver la bonne ligne
-    if project_code_at:
+    # 1. Essaie par adresse conso (plus fiable)
+    if adresse_conso:
+        adresse_key = adresse_conso.upper().replace(" ", "")
+        for e in compte_info:
+            if not e.get('_used'):
+                e_adresse = e.get('adresse_cle', '') or e.get('adresse', '').upper().replace(" ", "")
+                if e_adresse and adresse_key.startswith(e_adresse[:8]):
+                    e['_used'] = True
+                    entry_to_mark = e
+                    break
+
+    # 2. Essaie par project code Airtable
+    if not entry_to_mark and project_code_at:
         for e in compte_info:
             if not e.get('_used') and e.get('code_projet', '').upper() == project_code_at.upper():
                 e['_used'] = True
                 entry_to_mark = e
                 break
 
-    # Fallback : première non utilisée
+    # 3. Fallback : première non utilisée
     if not entry_to_mark:
         for e in compte_info:
             if not e.get('_used'):
@@ -253,7 +264,8 @@ def process_folder(dossier: str):
                 numero_compte = data.get("numero_compte", "")
                 compte_info = mapping.get(numero_compte)
 
-            mark_status(compte_info, project_code_at, SHEET_ID, mois)
+            mark_status(compte_info, project_code_at, SHEET_ID, mois,
+                       adresse_conso=data.get('adresse_consommation', data.get('adresse', '')))
 
             # --- Déplacer PDF ---
             done_folder = get_done_folder(fournisseur, mois)
