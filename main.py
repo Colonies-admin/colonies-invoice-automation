@@ -21,10 +21,10 @@ MOIS_MAP = {
     '09': 'SEPTEMBRE', '10': 'OCTOBRE', '11': 'NOVEMBRE', '12': 'DECEMBRE'
 }
 
-
 FOURNISSEUR_ONGLET = {
     "TOTALENERGIES": "TOTAL",
 }
+
 
 def get_onglet(fournisseur: str, date_prelevement: str) -> str:
     try:
@@ -39,6 +39,32 @@ def get_onglet(fournisseur: str, date_prelevement: str) -> str:
 def get_done_folder(fournisseur: str, mois: str) -> str:
     mois_only = mois.split('_')[1].lower() if '_' in mois else mois.lower()
     return os.path.join("pdfs_done", fournisseur.lower(), mois_only)
+
+
+def mark_status(compte_info, montant_ttc, sheet_id, mois):
+    """
+    Coche le STATUS dans le Sheets.
+    Si compte_info est une liste, identifie la bonne entrée par montant
+    pour les cas où plusieurs lignes ont le même N° client et type.
+    Sinon prend la première non utilisée.
+    """
+    if not compte_info:
+        return
+
+    if not isinstance(compte_info, list):
+        mark_as_done(sheet_id, mois, compte_info["row_idx"], compte_info["status_col"])
+        return
+
+    # Cherche la première entrée non encore utilisée
+    entry_to_mark = None
+    for e in compte_info:
+        if not e.get('_used'):
+            e['_used'] = True
+            entry_to_mark = e
+            break
+
+    if entry_to_mark:
+        mark_as_done(sheet_id, mois, entry_to_mark["row_idx"], entry_to_mark["status_col"])
 
 
 def process_folder(dossier: str):
@@ -61,9 +87,9 @@ def process_folder(dossier: str):
 
         try:
             data = extract_invoice_data(pdf_path)
-            fournisseur  = data.get('fournisseur', 'INCONNU')
-            nature       = data.get('nature', 'OPS')
-            is_hq        = data.get('is_hq', False)
+            fournisseur   = data.get('fournisseur', 'INCONNU')
+            nature        = data.get('nature', 'OPS')
+            is_hq         = data.get('is_hq', False)
             is_echeancier = data.get('is_echeancier', False)
 
             print(f"    ✅ Extraction OK ({fournisseur})")
@@ -80,52 +106,21 @@ def process_folder(dossier: str):
 
             # --- Onglet Sheets ---
             if is_echeancier:
-                # Pour un échéancier, on utilise le mois courant (pas la date du tableau)
                 mois_num = str(datetime.date.today().month).zfill(2)
                 mois_str = MOIS_MAP.get(mois_num, 'INCONNU')
                 mois = f"TOTAL_{mois_str}"
             else:
                 mois = get_onglet(fournisseur, data.get('date_prelevement', ''))
+
             if not mois:
                 print(f"    ⚠️  Impossible de détecter le mois - skipped")
                 ko += 1
                 continue
             print(f"       Onglet       : {mois}")
 
-            tag_ops  = data.get("tag_ops", "ELE-ELECTRICITY")
+            tag_ops = data.get("tag_ops", "ELE-ELECTRICITY")
 
-            # --- Échéancier TotalEnergies : pas de record Airtable, juste log + STATUS ---
-            if is_echeancier:
-                print(f"    📋 Échéancier GAZ détecté — montant mensuel {data.get('montant_ttc')}€")
-                print(f"       Pas de transaction Airtable à matcher pour un échéancier.")
-
-                if mois not in mappings_cache:
-                    try:
-                        mappings_cache[mois] = get_mapping(SHEET_ID, mois)
-                    except Exception as e:
-                        print(f"    ⚠️  Onglet {mois} introuvable - skipped")
-                        ko += 1
-                        continue
-
-                mapping = mappings_cache[mois]
-                numero_client = data.get('numero_client', '')
-                compte_info_list = find_totalenergies_entry(mapping, numero_client, tag_ops)
-
-                if compte_info_list:
-                    # find_totalenergies_entry peut retourner un dict ou une liste
-                    entries = compte_info_list if isinstance(compte_info_list, list) else [compte_info_list]
-                    for entry in entries:
-                        mark_as_done(SHEET_ID, mois, entry["row_idx"], entry["status_col"])
-
-                done_folder = get_done_folder(fournisseur, mois)
-                os.makedirs(done_folder, exist_ok=True)
-                shutil.move(pdf_path, os.path.join(done_folder, filename))
-                print(f"    📁 PDF déplacé vers {done_folder}/")
-                ok += 1
-                print()
-                continue
-
-            # --- Matching Sheets ---
+            # --- Charger le mapping Sheets ---
             if mois not in mappings_cache:
                 print(f"    📋 Chargement mapping {mois}...")
                 try:
@@ -137,21 +132,38 @@ def process_folder(dossier: str):
 
             mapping = mappings_cache[mois]
 
-            if is_hq:
-                project_code = None
-                compte_info  = None
+            # --- Échéancier : pas de transaction Airtable ---
+            if is_echeancier:
+                print(f"    📋 Échéancier GAZ détecté — montant mensuel {data.get('montant_ttc')}€")
+                print(f"       Pas de transaction Airtable à matcher pour un échéancier.")
+                numero_client = data.get('numero_client', '')
+                compte_info_list = find_totalenergies_entry(mapping, numero_client, tag_ops)
+                if compte_info_list:
+                    entries = compte_info_list if isinstance(compte_info_list, list) else [compte_info_list]
+                    for entry in entries:
+                        mark_as_done(SHEET_ID, mois, entry["row_idx"], entry["status_col"])
+                done_folder = get_done_folder(fournisseur, mois)
+                os.makedirs(done_folder, exist_ok=True)
+                shutil.move(pdf_path, os.path.join(done_folder, filename))
+                print(f"    📁 PDF déplacé vers {done_folder}/")
+                ok += 1
+                print()
+                continue
 
-            elif fournisseur == "TOTALENERGIES":
+            # --- Matching Sheets ---
+            compte_info  = None
+            project_code = None
+
+            if fournisseur == "TOTALENERGIES":
                 numero_client = data.get('numero_client', '')
                 compte_info = find_totalenergies_entry(mapping, numero_client, tag_ops)
-                if not compte_info:
+                if not compte_info and not is_hq:
                     ko += 1
                     continue
-                # Si liste (2 ELE même N° client), on prend la première pour le project_code
-                # (les deux ont le même project_code dans ce cas)
-                entry = compte_info[0] if isinstance(compte_info, list) else compte_info
-                project_code = entry.get("code_projet")
-                print(f"       Project code : {project_code}")
+                if compte_info:
+                    entry = compte_info[0] if isinstance(compte_info, list) else compte_info
+                    project_code = entry.get("code_projet")
+                    print(f"       Project code : {project_code}")
 
             elif fournisseur == "ENDESA":
                 adresse     = data.get('adresse', '')
@@ -169,12 +181,13 @@ def process_folder(dossier: str):
                 # Orange / Engie
                 numero_compte = data.get("numero_compte", "")
                 compte_info = mapping.get(numero_compte)
-                if not compte_info:
+                if not compte_info and not is_hq:
                     print(f"    ⚠️  Compte {numero_compte} absent du mapping - skipped")
                     ko += 1
                     continue
-                project_code = compte_info.get("code_projet")
-                print(f"       Project code : {project_code}")
+                if compte_info:
+                    project_code = compte_info.get("code_projet")
+                    print(f"       Project code : {project_code}")
 
             # --- Matching Airtable ---
             if fournisseur == "TOTALENERGIES":
@@ -217,20 +230,15 @@ def process_folder(dossier: str):
                 print(f"    ⚠️  Mis à jour mais PDF non attaché")
 
             # --- STATUS Sheets ---
-            if compte_info:
-                if isinstance(compte_info, list):
-                    # Plusieurs entrées (ex: 2 ELE même N° client)
-                    # On prend la première non encore marquée comme utilisée
-                    entry_to_mark = None
-                    for e in compte_info:
-                        if not e.get('_used'):
-                            e['_used'] = True
-                            entry_to_mark = e
-                            break
-                    if entry_to_mark:
-                        mark_as_done(SHEET_ID, mois, entry_to_mark["row_idx"], entry_to_mark["status_col"])
-                else:
-                    mark_as_done(SHEET_ID, mois, compte_info["row_idx"], compte_info["status_col"])
+            # Pour HQ sans compte_info, on cherche quand même dans le mapping
+            if is_hq and not compte_info and fournisseur == "TOTALENERGIES":
+                numero_client = data.get('numero_client', '')
+                compte_info = find_totalenergies_entry(mapping, numero_client, tag_ops)
+            elif is_hq and not compte_info:
+                numero_compte = data.get("numero_compte", "")
+                compte_info = mapping.get(numero_compte)
+
+            mark_status(compte_info, data.get('montant_ttc', ''), SHEET_ID, mois)
 
             # --- Déplacer PDF ---
             done_folder = get_done_folder(fournisseur, mois)
