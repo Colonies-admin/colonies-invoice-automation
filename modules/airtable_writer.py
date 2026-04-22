@@ -1,6 +1,5 @@
 import os
 import requests
-import base64
 
 AIRTABLE_API_URL = "https://api.airtable.com/v0"
 GITHUB_TOKEN = os.environ.get("GH_PAT")
@@ -52,17 +51,37 @@ def find_record_by_fragment(base_id, table_id, fragment):
         return None
     return records[0]["id"]
 
-def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_ttc):
+def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_ttc, date_prelevement):
     """
     Matching TotalEnergies.
-    Bank reference format : "Prelevement TotalEnergies Electricite et Gaz France-Reference client XXXXXXX"
-    Si plusieurs lignes pour le même N° client, affine par montant TTC.
+    Bank reference : "Prelevement TotalEnergies Electricite et Gaz France-Reference client XXXXXXX"
+    Filtre par N° client + mois/année du prélèvement pour éviter les ambiguïtés historiques.
+    Affine par montant TTC (valeur absolue) si plusieurs résultats.
+    date_prelevement format : "08.04.2026"
     """
     url = f"{AIRTABLE_API_URL}/{base_id}/{table_id}"
     headers = get_headers()
 
+    # Extraire année et mois pour filtrer sur Payment date
+    try:
+        parts = date_prelevement.split('.')
+        jour, mois, annee = parts[0], parts[1], parts[2]
+        # Format Airtable Payment date : "2026-04-08"
+        date_debut = f"{annee}-{mois}-01"
+        date_fin   = f"{annee}-{mois}-30"
+        filtre = (
+            f'AND('
+            f'SEARCH("{numero_client}", {{Bank reference}}), '
+            f'IS_AFTER({{Payment date}}, "{date_debut}"), '
+            f'IS_BEFORE({{Payment date}}, "{date_fin}")'
+            f')'
+        )
+    except Exception:
+        # Fallback sans filtre date
+        filtre = f'SEARCH("{numero_client}", {{Bank reference}})'
+
     params = {
-        "filterByFormula": f'SEARCH("{numero_client}", {{Bank reference}})',
+        "filterByFormula": filtre,
         "maxRecords": 10
     }
     response = requests.get(url, headers=headers, params=params)
@@ -72,34 +91,31 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
 
     records = response.json().get("records", [])
 
-    # DEBUG temporaire — à retirer après
-    for r in records:
-        print(f"       DEBUG fields: {r.get('fields', {})}")
-
     if not records:
-        print(f"       ⚠️  Aucune ligne trouvée pour N° client {numero_client}")
+        print(f"       ⚠️  Aucune ligne trouvée pour N° client {numero_client} en {mois}/{annee}")
         return None
 
     if len(records) == 1:
+        print(f"       ✅ Match unique pour N° client {numero_client} en {mois}/{annee}")
         return records[0]["id"]
 
+    # Plusieurs résultats → affiner par montant TTC (valeur absolue)
     try:
-        montant_float = float(str(montant_ttc).replace(',', '.'))
+        montant_float = abs(float(str(montant_ttc).replace(',', '.')))
     except (ValueError, TypeError):
         print(f"       ⚠️  Montant invalide '{montant_ttc}' — retour première ligne")
         return records[0]["id"]
 
     for record in records:
         fields = record.get("fields", {})
-        for field_name in ["Montant TTC", "Amount", "Montant", "Amount (€)", "Debit"]:
-            val = fields.get(field_name)
-            if val is not None:
-                try:
-                    if abs(float(val) - montant_float) < 0.02:
-                        print(f"       ✅ Match par montant {montant_float}€ → record {record['id']}")
-                        return record["id"]
-                except (ValueError, TypeError):
-                    continue
+        val = fields.get("Montant TTC")
+        if val is not None:
+            try:
+                if abs(abs(float(val)) - montant_float) < 0.02:
+                    print(f"       ✅ Match par montant {montant_float}€ → record {record['id']}")
+                    return record["id"]
+            except (ValueError, TypeError):
+                continue
 
     print(f"       ⚠️  Pas de match exact par montant {montant_float}€ — retour première ligne")
     return records[0]["id"]
