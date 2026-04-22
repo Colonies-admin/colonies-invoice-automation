@@ -184,11 +184,6 @@ def extract_totalenergies(text: str, filename: str = "") -> dict:
     result = {}
     text_upper = text.upper().replace(" ", "")
 
-    if "RE1_" in filename:
-        print("=== TEXTE BRUT RE1 ===")
-        print(text[:3000])
-        print("=== FIN ===")
-
     # --- Détection échéancier GAZ ---
     is_echeancier = (
         "CHEANCIER" in text_upper
@@ -207,9 +202,14 @@ def extract_totalenergies(text: str, filename: str = "") -> dict:
         result['tag_ops'] = "ELE-ELECTRICITY"
 
     # --- Numéro client ---
+    # Texte normal : "N° de client : 112362748"
+    # Texte collé  : "Référenceclient:113329809"
     match = re.search(r'N°\s*de\s*client\s*:\s*(\d+)', text, re.IGNORECASE)
     if not match:
-        match = re.search(r'R[eé]f[eé]rence\s*client\s*:\s*(\d+)', text, re.IGNORECASE)
+        match = re.search(r'R[eé]f[eé]rence\s*client\s*:?\s*(\d+)', text, re.IGNORECASE)
+    if not match:
+        # texte collé sans espaces
+        match = re.search(r'[Rr][eé]f[eé]renceclient:(\d+)', text_upper)
     if match:
         result['numero_client'] = match.group(1).strip()
 
@@ -218,27 +218,34 @@ def extract_totalenergies(text: str, filename: str = "") -> dict:
     if not match:
         match = re.search(r'Facture\s*n°\s*(\d+)', text, re.IGNORECASE)
     if not match and is_echeancier:
+        # "N° 602500394072" dans le titre de l'échéancier
         match = re.search(r'N°\s*(\d{10,})', text, re.IGNORECASE)
     if match:
         result['numero_facture'] = match.group(1).strip()
 
     # --- Montant TTC ---
     if is_echeancier:
-        # Mensualité du mois en cours, sinon première du tableau
+        # Tableau mensualités : "05avr.2026 129,00€" ou "05 avr. 2026  129,00 €"
+        # Cherche la ligne du mois courant
         mois_fr = {1:'janv', 2:'févr', 3:'mars', 4:'avr', 5:'mai', 6:'juin',
                    7:'juil', 8:'août', 9:'sept', 10:'oct', 11:'nov', 12:'déc'}
         mois_courant = mois_fr[datetime.date.today().month]
+        # Format collé sans espaces : "05avr.2026129,00€"
         match = re.search(
-            rf'\d{{2}}\s+{mois_courant}[^\n]*?([\d\s]+[,\.]\d{{2}})\s*€',
+            rf'\d{{2}}{mois_courant}[^\n€]*?([\d]+[,\.]\d{{2}})€',
             text, re.IGNORECASE
         )
         if not match:
+            # Format avec espaces : "05 avr. 2026  129,00 €"
             match = re.search(
-                r'\d{2}\s+\w+\.?\s+\d{4}\s+([\d\s]+[,\.]\d{2})\s*€',
+                rf'\d{{2}}\s+{mois_courant}[^\n]*([\d]+[,\.]\d{{2}})\s*€',
                 text, re.IGNORECASE
             )
+        if not match:
+            # Fallback : première ligne du tableau
+            match = re.search(r'\d{2}[^\n]+([\d]+[,\.]\d{2})\s*€', text)
         if match:
-            result['montant_ttc'] = match.group(1).replace(' ', '').replace(',', '.')
+            result['montant_ttc'] = match.group(1).replace(',', '.')
         result['montant_mensuel'] = result.get('montant_ttc', '')
     else:
         match = re.search(r'Montant\s*TTC\s+([\d\s]+[,\.]\d{2})\s*€', text, re.IGNORECASE)
@@ -250,13 +257,17 @@ def extract_totalenergies(text: str, filename: str = "") -> dict:
     if match:
         result['date_prelevement'] = f"{match.group(1)}.{match.group(2)}.{match.group(3)}"
     elif is_echeancier:
-        mois = {'janv': '01', 'févr': '02', 'mars': '03', 'avr': '04', 'mai': '05',
-                'juin': '06', 'juil': '07', 'août': '08', 'sept': '09', 'oct': '10',
-                'nov': '11', 'déc': '12'}
-        match = re.search(r'(\d{2})\s+(\w+)\.?\s+(\d{4})', text)
+        # Cherche "05janv.2026" ou "05 janv. 2026" dans le tableau des mensualités
+        mois = {'janv': '01', 'fevr': '02', 'mars': '03', 'avr': '04', 'mai': '05',
+                'juin': '06', 'juil': '07', 'aout': '08', 'sept': '09', 'oct': '10',
+                'nov': '11', 'dec': '12'}
+        # Format collé : "05janv.2026"
+        match = re.search(r'(\d{2})([a-zéû]+)\.?(\d{4})', text, re.IGNORECASE)
         if match:
             jour = match.group(1)
             mois_str = match.group(2).lower()[:4]
+            # normaliser accents
+            mois_str = mois_str.replace('é', 'e').replace('û', 'u').replace('è', 'e')
             annee = match.group(3)
             mois_num = mois.get(mois_str, '00')
             result['date_prelevement'] = f"{jour}.{mois_num}.{annee}"
@@ -264,13 +275,24 @@ def extract_totalenergies(text: str, filename: str = "") -> dict:
     # --- Adresse de consommation ---
     adresse_conso = ""
     if is_echeancier:
-        # "Lieu de consommation :\n22 RUE DES HETRES\n92000 NANTERRE"
+        # Texte collé : "Lieudeconsommation:...\n22RUEDESHETRES\n92000NANTERRE"
+        # On travaille sur le texte avec espaces supprimés pour trouver le bloc
         match = re.search(
-            r'Lieu de consommation\s*:\s*\n([^\n]+)\n(\d{5})\s+([^\n]+)',
-            text, re.IGNORECASE
+            r'LIEUDECONSOMMATION[^\n]*\n([^\n]+)\n(\d{5})\s*([^\n]+)',
+            text_upper, re.IGNORECASE
         )
         if match:
-            adresse_conso = f"{match.group(1).strip()} {match.group(3).strip()}"
+            rue = match.group(1).strip()
+            ville = match.group(3).strip()
+            adresse_conso = f"{rue} {ville}"
+        else:
+            # Fallback texte normal
+            match = re.search(
+                r'Lieu de consommation\s*:?\s*\n([^\n]+)\n(\d{5})\s+([^\n]+)',
+                text, re.IGNORECASE
+            )
+            if match:
+                adresse_conso = f"{match.group(1).strip()} {match.group(3).strip()}"
     else:
         # Format page 3 ELE : "Adresse du site\nCOLONIES\n99B QUAI WINSTON\n94210 ST MAUR"
         match = re.search(
@@ -280,7 +302,7 @@ def extract_totalenergies(text: str, filename: str = "") -> dict:
         if match:
             adresse_conso = f"{match.group(1).strip()} {match.group(3).strip()}"
         else:
-            # Format page 3 GAZ : "COLONIES\n37 RUE DES ROSIERS\nPAV\n94230 CACHAN"
+            # Format page 3 GAZ
             match = re.search(
                 r'Adresse du site\s*\nCOLONIES\s*\n([^\n€]+)\n(\d{5})\s+([^\n€]+)',
                 text, re.IGNORECASE
@@ -293,7 +315,7 @@ def extract_totalenergies(text: str, filename: str = "") -> dict:
             if match:
                 adresse_conso = f"{match.group(1).strip()} {match.group(3).strip()}"
             else:
-                # Fallback tableau page 2 : "94210 ST MAUR,99B QUAI WINSTON CHURCHILL"
+                # Fallback tableau page 2
                 match = re.search(r'\d{5}\s+[^,\n]+,([^\n€]+)', text, re.IGNORECASE)
                 if match:
                     adresse_conso = match.group(1).strip()
@@ -301,8 +323,10 @@ def extract_totalenergies(text: str, filename: str = "") -> dict:
     result['adresse_consommation'] = adresse_conso
 
     # --- Nature HQ / OPS : adresse de CONSOMMATION uniquement ---
-    hq_addresses = ["21 RUE DE BRUXELLES", "16 RUE CASSETTE"]
-    is_hq = any(hq in adresse_conso.upper() for hq in hq_addresses)
+    hq_addresses = ["21 RUE DE BRUXELLES", "16 RUE CASSETTE",
+                    "21RUEDEBRUXELLES", "16RUECASSETTE"]
+    is_hq = any(hq in adresse_conso.upper().replace(" ", "") for hq in
+                [h.replace(" ", "") for h in hq_addresses])
     result['nature'] = "HQ" if is_hq else "OPS"
     result['is_hq'] = is_hq
 
