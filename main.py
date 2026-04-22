@@ -6,8 +6,8 @@ import shutil
 
 print("Script démarré", flush=True)
 
-from modules.sheets_reader import get_mapping, mark_as_done, find_or_create_endesa_line
-from modules.airtable_writer import find_record_by_fragment, update_record, attach_pdf
+from modules.sheets_reader import get_mapping, mark_as_done, find_or_create_endesa_line, find_totalenergies_entry
+from modules.airtable_writer import find_record_by_fragment, find_record_by_client_and_amount, update_record, attach_pdf
 from modules.pdf_extractor import extract_invoice_data
 
 SHEET_ID       = os.environ.get("GOOGLE_SHEET_ID")
@@ -55,34 +55,65 @@ def process_folder(dossier: str):
 
         try:
             data = extract_invoice_data(pdf_path)
-            fournisseur = data.get('fournisseur', 'INCONNU')
-            nature      = data.get('nature', 'OPS')
-            is_hq       = data.get('is_hq', False)
+            fournisseur  = data.get('fournisseur', 'INCONNU')
+            nature       = data.get('nature', 'OPS')
+            is_hq        = data.get('is_hq', False)
+            is_echeancier = data.get('is_echeancier', False)
 
             print(f"    ✅ Extraction OK ({fournisseur})")
-            print(f"       Facture     : {data.get('numero_facture')}")
-            print(f"       Fragment AT : {data.get('fragment_at')}")
-            print(f"       Adresse     : {data.get('adresse')}")
-            print(f"       Montant TTC : {data.get('montant_ttc')} €")
-            print(f"       Prélèvement : {data.get('date_prelevement')}")
-            print(f"       TAG OPS     : {data.get('tag_ops')}")
-            print(f"       Nature      : {nature}")
+            print(f"       Facture      : {data.get('numero_facture')}")
+            print(f"       Fragment AT  : {data.get('fragment_at')}")
+            print(f"       Adresse conso: {data.get('adresse_consommation', data.get('adresse'))}")
+            print(f"       Montant TTC  : {data.get('montant_ttc')} €")
+            print(f"       Prélèvement  : {data.get('date_prelevement')}")
+            print(f"       TAG OPS      : {data.get('tag_ops')}")
+            print(f"       Nature       : {nature}")
+            if fournisseur == "TOTALENERGIES":
+                print(f"       N° client    : {data.get('numero_client')}")
+                print(f"       Échéancier   : {is_echeancier}")
 
+            # --- Onglet Sheets ---
             mois = get_onglet(fournisseur, data.get('date_prelevement', ''))
             if not mois:
                 print(f"    ⚠️  Impossible de détecter le mois - skipped")
                 ko += 1
                 continue
-            print(f"       Onglet      : {mois}")
+            print(f"       Onglet       : {mois}")
 
-            fragment    = data.get("fragment_at")
-            tag_ops     = data.get("tag_ops", "ELE-ELECTRICITY")
+            tag_ops  = data.get("tag_ops", "ELE-ELECTRICITY")
 
-            if not fragment:
-                print(f"    ⚠️  Fragment AT introuvable - skipped")
-                ko += 1
+            # --- Échéancier TotalEnergies : pas de record Airtable, juste log + STATUS ---
+            if is_echeancier:
+                print(f"    📋 Échéancier GAZ détecté — montant mensuel {data.get('montant_ttc')}€")
+                print(f"       Pas de transaction Airtable à matcher pour un échéancier.")
+
+                if mois not in mappings_cache:
+                    try:
+                        mappings_cache[mois] = get_mapping(SHEET_ID, mois)
+                    except Exception as e:
+                        print(f"    ⚠️  Onglet {mois} introuvable - skipped")
+                        ko += 1
+                        continue
+
+                mapping = mappings_cache[mois]
+                numero_client = data.get('numero_client', '')
+                compte_info_list = find_totalenergies_entry(mapping, numero_client, tag_ops)
+
+                if compte_info_list:
+                    # find_totalenergies_entry peut retourner un dict ou une liste
+                    entries = compte_info_list if isinstance(compte_info_list, list) else [compte_info_list]
+                    for entry in entries:
+                        mark_as_done(SHEET_ID, mois, entry["row_idx"], entry["status_col"])
+
+                done_folder = get_done_folder(fournisseur, mois)
+                os.makedirs(done_folder, exist_ok=True)
+                shutil.move(pdf_path, os.path.join(done_folder, filename))
+                print(f"    📁 PDF déplacé vers {done_folder}/")
+                ok += 1
+                print()
                 continue
 
+            # --- Matching Sheets ---
             if mois not in mappings_cache:
                 print(f"    📋 Chargement mapping {mois}...")
                 try:
@@ -97,6 +128,19 @@ def process_folder(dossier: str):
             if is_hq:
                 project_code = None
                 compte_info  = None
+
+            elif fournisseur == "TOTALENERGIES":
+                numero_client = data.get('numero_client', '')
+                compte_info = find_totalenergies_entry(mapping, numero_client, tag_ops)
+                if not compte_info:
+                    ko += 1
+                    continue
+                # Si liste (2 ELE même N° client), on prend la première pour le project_code
+                # (les deux ont le même project_code dans ce cas)
+                entry = compte_info[0] if isinstance(compte_info, list) else compte_info
+                project_code = entry.get("code_projet")
+                print(f"       Project code : {project_code}")
+
             elif fournisseur == "ENDESA":
                 adresse     = data.get('adresse', '')
                 ref_contrat = data.get('ref_contrat', '')
@@ -108,7 +152,9 @@ def process_folder(dossier: str):
                     continue
                 project_code = compte_info.get("code_projet")
                 print(f"       Project code : {project_code}")
+
             else:
+                # Orange / Engie
                 numero_compte = data.get("numero_compte", "")
                 compte_info = mapping.get(numero_compte)
                 if not compte_info:
@@ -118,12 +164,27 @@ def process_folder(dossier: str):
                 project_code = compte_info.get("code_projet")
                 print(f"       Project code : {project_code}")
 
-            record_id = find_record_by_fragment(AIRTABLE_BASE, AIRTABLE_TABLE, fragment)
+            # --- Matching Airtable ---
+            if fournisseur == "TOTALENERGIES":
+                numero_client = data.get('numero_client', '')
+                montant_ttc   = data.get('montant_ttc', '')
+                record_id = find_record_by_client_and_amount(
+                    AIRTABLE_BASE, AIRTABLE_TABLE, numero_client, montant_ttc
+                )
+            else:
+                fragment = data.get("fragment_at")
+                if not fragment:
+                    print(f"    ⚠️  Fragment AT introuvable - skipped")
+                    ko += 1
+                    continue
+                record_id = find_record_by_fragment(AIRTABLE_BASE, AIRTABLE_TABLE, fragment)
+
             if not record_id:
-                print(f"    ⚠️  Fragment '{fragment}' non trouvé dans Airtable - skipped")
+                print(f"    ⚠️  Ligne non trouvée dans Airtable - skipped")
                 ko += 1
                 continue
 
+            # --- Update + attach ---
             updated = update_record(
                 AIRTABLE_BASE, AIRTABLE_TABLE, record_id,
                 project_code, tag_ops, nature
@@ -142,13 +203,15 @@ def process_folder(dossier: str):
             else:
                 print(f"    ⚠️  Mis à jour mais PDF non attaché")
 
+            # --- STATUS Sheets ---
             if compte_info:
-                mark_as_done(SHEET_ID, mois, compte_info["row_idx"], compte_info["status_col"])
+                entry = compte_info[0] if isinstance(compte_info, list) else compte_info
+                mark_as_done(SHEET_ID, mois, entry["row_idx"], entry["status_col"])
 
+            # --- Déplacer PDF ---
             done_folder = get_done_folder(fournisseur, mois)
             os.makedirs(done_folder, exist_ok=True)
-            done_path = os.path.join(done_folder, filename)
-            shutil.move(pdf_path, done_path)
+            shutil.move(pdf_path, os.path.join(done_folder, filename))
             print(f"    📁 PDF déplacé vers {done_folder}/")
 
             ok += 1
