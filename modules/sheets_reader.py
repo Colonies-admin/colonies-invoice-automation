@@ -1,4 +1,3 @@
-# sheets_reader.py
 import gspread
 from google.oauth2.service_account import Credentials
 import os
@@ -26,8 +25,10 @@ def normalise_adresse(adresse: str) -> str:
 
 def clean_adresse_key(adresse: str) -> str:
     adresse = adresse.upper()
-    for mot in ['ATELIER', 'PAV', '1ET', '2ET', 'RDC', 'BAT', 'BATIMENT']:
+    for mot in ['ATELIER', 'PAV', '1ET', '2ET', 'RDC', 'BAT', 'BATIMENT', 'LOGEMENT', '1ER']:
         adresse = adresse.replace(mot, '')
+    adresse = adresse.split(',')[0]
+    adresse = re.split(r'\s*-\s*', adresse)[0]
     adresse = adresse.replace(' ', '')
     return adresse.strip()
 
@@ -106,7 +107,7 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
                 continue
 
         mapping[cle] = {
-            "adresse":        get_val(idx_adresse),
+            "adresse":        get_val(idx_adresse),  # adresse propre du Sheets
             "code_projet":    get_val(idx_projet),
             "numero_contrat": get_val(idx_contrat),
             "row_idx":        row_idx,
@@ -119,13 +120,6 @@ def get_mapping(sheet_id: str, month_tab: str) -> dict:
 
 
 def find_or_create_endesa_line(sheet_id: str, month_tab: str, adresse: str, ref_contrat: str, mapping: dict) -> dict:
-    """
-    Pour Endesa :
-    - Si adresse+contrat déjà dans mapping → retourne la ligne
-    - Si adresse seule trouvée sans contrat → met à jour la ref contrat et retourne la ligne
-    - Si adresse avec contrat différent → crée une nouvelle ligne avec même project code
-    - Si adresse inconnue → skipe
-    """
     adresse_cle = clean_adresse_key(adresse)
     cle_complete = adresse_cle + '_' + ref_contrat if ref_contrat else adresse_cle
 
@@ -133,23 +127,22 @@ def find_or_create_endesa_line(sheet_id: str, month_tab: str, adresse: str, ref_
     if cle_complete in mapping:
         return mapping[cle_complete]
 
-    # Cas 2 : adresse seule trouvée sans ref contrat
+    # Cas 2 : adresse seule trouvée sans ref contrat → ajouter ref contrat
     if adresse_cle in mapping:
         ligne = mapping[adresse_cle]
+        adresse_sheets = ligne['adresse']  # on garde l'adresse propre du Sheets
         if ref_contrat:
-            print(f"       📝 Ajout ref contrat {ref_contrat} sur ligne existante ({adresse})")
+            print(f"       📝 Ajout ref contrat {ref_contrat} sur ligne existante ({adresse_sheets})")
             try:
                 client = get_client()
                 sheet = client.open_by_key(sheet_id)
                 worksheet = sheet.worksheet(month_tab)
-                # Trouver la colonne contrat
                 headers = worksheet.row_values(1)
-                if len(headers) < 2:
+                if not any('adresse' in h.lower() for h in headers):
                     headers = worksheet.row_values(2)
                 idx_contrat = next((i+1 for i, h in enumerate(headers) if 'contrat' in h.lower()), None)
                 if idx_contrat:
                     worksheet.update_cell(ligne['row_idx'], idx_contrat, ref_contrat)
-                    # Mettre à jour le mapping en mémoire
                     mapping[cle_complete] = {**ligne, 'numero_contrat': ref_contrat}
                     del mapping[adresse_cle]
                     return mapping[cle_complete]
@@ -157,24 +150,25 @@ def find_or_create_endesa_line(sheet_id: str, month_tab: str, adresse: str, ref_
                 print(f"       ⚠️  Erreur mise à jour ref contrat : {e}")
         return ligne
 
-    # Cas 3 : adresse avec contrat différent → chercher une ligne avec même adresse
+    # Cas 3 : adresse avec contrat différent → créer nouvelle ligne
     lignes_meme_adresse = [v for k, v in mapping.items() if v.get('adresse_cle') == adresse_cle]
     if lignes_meme_adresse:
-        project_code = lignes_meme_adresse[0]['code_projet']
-        print(f"       📝 Nouveau contrat {ref_contrat} pour {adresse} → Project Code {project_code} — création ligne")
+        project_code  = lignes_meme_adresse[0]['code_projet']
+        adresse_sheets = lignes_meme_adresse[0]['adresse']  # adresse propre du Sheets
+        print(f"       📝 Nouveau contrat {ref_contrat} pour {adresse_sheets} → Project Code {project_code} — création ligne")
         try:
             client = get_client()
             sheet = client.open_by_key(sheet_id)
             worksheet = sheet.worksheet(month_tab)
             headers = worksheet.row_values(1)
-            if len(headers) < 2:
+            if not any('adresse' in h.lower() for h in headers):
                 headers = worksheet.row_values(2)
 
             new_row = [''] * len(headers)
             for i, h in enumerate(headers):
                 h_low = h.lower()
                 if 'adresse' in h_low:
-                    new_row[i] = adresse
+                    new_row[i] = adresse_sheets  # adresse propre du Sheets, pas du PDF
                 elif 'project' in h_low:
                     new_row[i] = project_code
                 elif 'contrat' in h_low:
@@ -188,7 +182,7 @@ def find_or_create_endesa_line(sheet_id: str, month_tab: str, adresse: str, ref_
             status_col = next((i for i, h in enumerate(headers) if 'status' in h.lower()), None)
 
             new_entry = {
-                "adresse":        adresse,
+                "adresse":        adresse_sheets,
                 "code_projet":    project_code,
                 "numero_contrat": ref_contrat,
                 "row_idx":        new_row_idx,
