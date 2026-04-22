@@ -311,10 +311,14 @@ def extract_totalenergies(text: str, filename: str = "") -> dict:
             if match:
                 adresse_conso = f"{match.group(1).strip()} {match.group(3).strip()}"
             else:
-                # Fallback tableau page 2 uniquement (pas COLONIES seul qui peut matcher facturation)
+                # Fallback tableau page 2 : "59800 LILLE,204 RUE DU FAUBOURG DE ROUBAIX"
                 match = re.search(r'\d{5}\s+[^,\n]+,([^\n€]+)', text, re.IGNORECASE)
                 if match:
                     adresse_conso = match.group(1).strip()
+
+    # Nettoyer l'adresse : supprimer tout ce qui suit un montant (ex: "15 RUE DES ILES 10,00")
+    if adresse_conso:
+        adresse_conso = re.sub(r'\s+\d+[,\.]\d+.*$', '', adresse_conso).strip()
 
     result['adresse_consommation'] = adresse_conso
 
