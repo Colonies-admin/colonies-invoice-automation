@@ -3,6 +3,7 @@ import sys
 import argparse
 import glob
 import shutil
+import datetime
 
 print("Script démarré", flush=True)
 
@@ -78,7 +79,13 @@ def process_folder(dossier: str):
                 print(f"       Échéancier   : {is_echeancier}")
 
             # --- Onglet Sheets ---
-            mois = get_onglet(fournisseur, data.get('date_prelevement', ''))
+            if is_echeancier:
+                # Pour un échéancier, on utilise le mois courant (pas la date du tableau)
+                mois_num = str(datetime.date.today().month).zfill(2)
+                mois_str = MOIS_MAP.get(mois_num, 'INCONNU')
+                mois = f"TOTAL_{mois_str}"
+            else:
+                mois = get_onglet(fournisseur, data.get('date_prelevement', ''))
             if not mois:
                 print(f"    ⚠️  Impossible de détecter le mois - skipped")
                 ko += 1
