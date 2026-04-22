@@ -41,12 +41,11 @@ def get_done_folder(fournisseur: str, mois: str) -> str:
     return os.path.join("pdfs_done", fournisseur.lower(), mois_only)
 
 
-def mark_status(compte_info, montant_ttc, sheet_id, mois):
+def mark_status(compte_info, project_code_at, sheet_id, mois):
     """
     Coche le STATUS dans le Sheets.
-    Si compte_info est une liste, identifie la bonne entrée par montant
-    pour les cas où plusieurs lignes ont le même N° client et type.
-    Sinon prend la première non utilisée.
+    Si compte_info est une liste, utilise le project_code retourné par Airtable
+    pour identifier la bonne ligne Sheets à cocher.
     """
     if not compte_info:
         return
@@ -55,13 +54,23 @@ def mark_status(compte_info, montant_ttc, sheet_id, mois):
         mark_as_done(sheet_id, mois, compte_info["row_idx"], compte_info["status_col"])
         return
 
-    # Cherche la première entrée non encore utilisée
     entry_to_mark = None
-    for e in compte_info:
-        if not e.get('_used'):
-            e['_used'] = True
-            entry_to_mark = e
-            break
+
+    # Si on a un project code depuis Airtable, on s'en sert pour trouver la bonne ligne
+    if project_code_at:
+        for e in compte_info:
+            if not e.get('_used') and e.get('code_projet', '').upper() == project_code_at.upper():
+                e['_used'] = True
+                entry_to_mark = e
+                break
+
+    # Fallback : première non utilisée
+    if not entry_to_mark:
+        for e in compte_info:
+            if not e.get('_used'):
+                e['_used'] = True
+                entry_to_mark = e
+                break
 
     if entry_to_mark:
         mark_as_done(sheet_id, mois, entry_to_mark["row_idx"], entry_to_mark["status_col"])
@@ -132,7 +141,7 @@ def process_folder(dossier: str):
 
             mapping = mappings_cache[mois]
 
-            # --- Échéancier : pas de transaction Airtable ---
+            # --- Échéancier ---
             if is_echeancier:
                 print(f"    📋 Échéancier GAZ détecté — montant mensuel {data.get('montant_ttc')}€")
                 print(f"       Pas de transaction Airtable à matcher pour un échéancier.")
@@ -190,13 +199,19 @@ def process_folder(dossier: str):
                     print(f"       Project code : {project_code}")
 
             # --- Matching Airtable ---
+            project_code_at = None  # Project code retourné par Airtable
+
             if fournisseur == "TOTALENERGIES":
                 numero_client = data.get('numero_client', '')
                 montant_ttc   = data.get('montant_ttc', '')
                 date_prel     = data.get('date_prelevement', '')
-                record_id = find_record_by_client_and_amount(
+                record_id, project_code_at = find_record_by_client_and_amount(
                     AIRTABLE_BASE, AIRTABLE_TABLE, numero_client, montant_ttc, date_prel
                 )
+                # Utilise le project code Airtable si disponible
+                if project_code_at and not project_code:
+                    project_code = project_code_at
+                    print(f"       Project code (AT) : {project_code}")
             else:
                 fragment = data.get("fragment_at")
                 if not fragment:
@@ -230,7 +245,7 @@ def process_folder(dossier: str):
                 print(f"    ⚠️  Mis à jour mais PDF non attaché")
 
             # --- STATUS Sheets ---
-            # Pour HQ sans compte_info, on cherche quand même dans le mapping
+            # Pour HQ sans compte_info, cherche quand même dans le mapping
             if is_hq and not compte_info and fournisseur == "TOTALENERGIES":
                 numero_client = data.get('numero_client', '')
                 compte_info = find_totalenergies_entry(mapping, numero_client, tag_ops)
@@ -238,7 +253,7 @@ def process_folder(dossier: str):
                 numero_compte = data.get("numero_compte", "")
                 compte_info = mapping.get(numero_compte)
 
-            mark_status(compte_info, data.get('montant_ttc', ''), SHEET_ID, mois)
+            mark_status(compte_info, project_code_at, SHEET_ID, mois)
 
             # --- Déplacer PDF ---
             done_folder = get_done_folder(fournisseur, mois)
