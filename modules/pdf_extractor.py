@@ -484,3 +484,4 @@ if __name__ == "__main__":
         data = extract_invoice_data(sys.argv[1])
         for k, v in data.items():
             print(f"{k}: {v}")
+ 
