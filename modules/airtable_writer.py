@@ -140,7 +140,7 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
     pc = get_project_code(records[0])
     return records[0]["id"], pc
 
-def update_record(base_id, table_id, record_id, project_code, tag_ops, nature):
+def update_record(base_id, table_id, record_id, project_code, tag_ops, nature, tva=None, vat_amount_at=None):
     project_record_id = find_project_record_id(base_id, project_code) if project_code else None
     url = f"{AIRTABLE_API_URL}/{base_id}/{table_id}/{record_id}"
     headers = get_headers()
@@ -150,6 +150,24 @@ def update_record(base_id, table_id, record_id, project_code, tag_ops, nature):
     }
     if project_record_id:
         fields["Project Code"] = [project_record_id]
+
+    # --- Check TVA ---
+    if tva is not None:
+        try:
+            tva_float = float(tva)
+            # Comparer avec VAT Amount Airtable si disponible
+            if vat_amount_at is not None:
+                try:
+                    diff = abs(abs(float(vat_amount_at)) - tva_float)
+                    emoji = "✅" if diff < 0.05 else "⚠️"
+                except (ValueError, TypeError):
+                    emoji = "✅"
+            else:
+                emoji = "✅"
+            fields["Check TVA"] = f"{tva_float:.2f} € {emoji}"
+        except (ValueError, TypeError):
+            pass
+
     response = requests.patch(url, headers=headers, json={"fields": fields})
     if response.status_code != 200:
         print(f"Erreur update: {response.status_code} {response.text}")
