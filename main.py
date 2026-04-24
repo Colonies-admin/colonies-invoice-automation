@@ -228,16 +228,16 @@ def process_folder(dossier: str):
                     print(f"       Project code : {project_code}")
 
             # --- Matching Airtable ---
-            project_code_at = None  # Project code retourné par Airtable
+            project_code_at = None
+            vat_amount_at = None
 
             if fournisseur == "TOTALENERGIES":
                 numero_client = data.get('numero_client', '')
                 montant_ttc   = data.get('montant_ttc', '')
                 date_prel     = data.get('date_prelevement', '')
-                record_id, project_code_at = find_record_by_client_and_amount(
+                record_id, project_code_at, vat_amount_at = find_record_by_client_and_amount(
                     AIRTABLE_BASE, AIRTABLE_TABLE, numero_client, montant_ttc, date_prel
                 )
-                # Utilise le project code Airtable si disponible
                 if project_code_at and not project_code:
                     project_code = project_code_at
                     print(f"       Project code (AT) : {project_code}")
@@ -247,7 +247,7 @@ def process_folder(dossier: str):
                     print(f"    ⚠️  Fragment AT introuvable - skipped")
                     ko += 1
                     continue
-                record_id = find_record_by_fragment(AIRTABLE_BASE, AIRTABLE_TABLE, fragment)
+                record_id, vat_amount_at = find_record_by_fragment(AIRTABLE_BASE, AIRTABLE_TABLE, fragment)
 
             if not record_id:
                 print(f"    ⚠️  Ligne non trouvée dans Airtable - skipped")
@@ -259,7 +259,7 @@ def process_folder(dossier: str):
                 AIRTABLE_BASE, AIRTABLE_TABLE, record_id,
                 project_code, tag_ops, nature,
                 tva=data.get('tva'),
-                vat_amount_at=None  # on récupère pas le VAT Amount pour l'instant
+                vat_amount_at=vat_amount_at
             )
             if not updated:
                 print(f"    ❌ Erreur mise à jour Airtable")
