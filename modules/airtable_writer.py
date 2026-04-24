@@ -45,11 +45,12 @@ def find_record_by_fragment(base_id, table_id, fragment):
     response = requests.get(url, headers=headers, params=params)
     if response.status_code != 200:
         print(f"Erreur recherche: {response.status_code} {response.text}")
-        return None
+        return None, None
     records = response.json().get("records", [])
     if not records:
-        return None
-    return records[0]["id"]
+        return None, None
+    vat = records[0].get("fields", {}).get("VAT Amount")
+    return records[0]["id"], vat
 
 def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_ttc, date_prelevement):
     """
@@ -113,8 +114,9 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
 
     if len(records) == 1:
         pc = get_project_code(records[0])
+        vat = records[0].get("fields", {}).get("VAT Amount")
         print(f"       ✅ Match unique pour N° client {numero_client} en {mois}/{annee} (project: {pc})")
-        return records[0]["id"], pc
+        return records[0]["id"], pc, vat
 
     # Plusieurs résultats → affiner par montant TTC
     try:
@@ -122,7 +124,8 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
     except (ValueError, TypeError):
         print(f"       ⚠️  Montant invalide '{montant_ttc}' — retour première ligne")
         pc = get_project_code(records[0])
-        return records[0]["id"], pc
+        vat = records[0].get("fields", {}).get("VAT Amount")
+        return records[0]["id"], pc, vat
 
     for record in records:
         fields = record.get("fields", {})
@@ -131,14 +134,16 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
             try:
                 if abs(abs(float(val)) - montant_float) < 0.02:
                     pc = get_project_code(record)
+                    vat = fields.get("VAT Amount")
                     print(f"       ✅ Match par montant {montant_float}€ → record {record['id']} (project: {pc})")
-                    return record["id"], pc
+                    return record["id"], pc, vat
             except (ValueError, TypeError):
                 continue
 
     print(f"       ⚠️  Pas de match exact par montant {montant_float}€ — retour première ligne")
     pc = get_project_code(records[0])
-    return records[0]["id"], pc
+    vat = records[0].get("fields", {}).get("VAT Amount")
+    return records[0]["id"], pc, vat
 
 def update_record(base_id, table_id, record_id, project_code, tag_ops, nature, tva=None, vat_amount_at=None):
     project_record_id = find_project_record_id(base_id, project_code) if project_code else None
