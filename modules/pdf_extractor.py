@@ -70,6 +70,68 @@ def extract_engie(text: str) -> dict:
     result = {}
     result['tag_ops'] = detect_energie(text)
 
+    # --- Détection échéancier Engie ---
+    is_echeancier = (
+        "Echéancier N°" in text
+        or "Échéancier N°" in text
+        or "ECHEANCIER" in text.upper()
+    )
+    result['is_echeancier'] = is_echeancier
+
+    if is_echeancier:
+        result['tag_ops'] = "GAS-GAS"
+
+        # N° échéancier : "Echéancier N°\nPP912500414117"
+        match = re.search(r'Ech[eé]ancier\s*N°\s*\n?([A-Z0-9]+)', text, re.IGNORECASE)
+        if match:
+            result['numero_facture'] = match.group(1).strip()
+            result['fragment_at'] = result['numero_facture']
+
+        # Ref client : "Votre référence client\nCOLONIES\n300003329622"
+        match = re.search(r'[Vv]otre\s+r[eé]f[eé]rence\s+client\s*\nCOLONIES\s*\n(\d+)', text)
+        if match:
+            result['numero_compte'] = match.group(1).strip()
+
+        # Adresse conso : "Lieu de consommation\nCOLONIES\n9 RUE DE MAYENNE\n94000 CRETEIL"
+        match = re.search(
+            r'Lieu de consommation\s*\nCOLONIES\s*\n([^\n]+)\n(\d{5})\s+([^\n]+)',
+            text, re.IGNORECASE
+        )
+        if match:
+            result['adresse'] = f"{match.group(1).strip()} {match.group(3).strip()}"
+
+        result['nature'] = "OPS"
+        result['is_hq'] = False
+
+        # Montant mensualité du mois courant
+        import datetime
+        mois_fr = {1:'janvier', 2:'février', 3:'mars', 4:'avril', 5:'mai', 6:'juin',
+                   7:'juillet', 8:'août', 9:'septembre', 10:'octobre', 11:'novembre', 12:'décembre'}
+        mois_courant = mois_fr[datetime.date.today().month]
+        match = re.search(
+            rf'\d{{1,2}}\s+{mois_courant}\s+\d{{4}}\s+([\d\s]+[,\.]\d{{2}})\s*€',
+            text, re.IGNORECASE
+        )
+        if not match:
+            # Fallback : première ligne du tableau
+            match = re.search(r'\d{1,2}\s+\w+\s+\d{4}\s+([\d\s]+[,\.]\d{2})\s*€', text)
+        if match:
+            result['montant_ttc'] = match.group(1).replace(' ', '').replace(',', '.')
+
+        # Date prélèvement : première date du tableau
+        mois_map = {'janvier': '01', 'février': '02', 'mars': '03', 'avril': '04',
+                    'mai': '05', 'juin': '06', 'juillet': '07', 'août': '08',
+                    'septembre': '09', 'octobre': '10', 'novembre': '11', 'décembre': '12'}
+        match = re.search(r'(\d{1,2})\s+(\w+)\s+(\d{4})', text)
+        if match:
+            jour = match.group(1).zfill(2)
+            mois_str = match.group(2).lower()
+            annee = match.group(3)
+            mois_num = mois_map.get(mois_str, '00')
+            result['date_prelevement'] = f"{jour}.{mois_num}.{annee}"
+
+        return result
+
     match_lieu = re.search(r'Lieu de consommation.*?COLONIES\s+(.*?)\s+\d{5}', text, re.IGNORECASE | re.DOTALL)
     if match_lieu and "21 RUE DE BRUXELLES" in match_lieu.group(1).upper():
         result['nature'] = "HQ"
@@ -377,4 +439,3 @@ if __name__ == "__main__":
         data = extract_invoice_data(sys.argv[1])
         for k, v in data.items():
             print(f"{k}: {v}")
-            
