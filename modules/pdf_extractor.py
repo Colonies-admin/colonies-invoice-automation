@@ -63,6 +63,10 @@ def extract_orange(text: str) -> dict:
         result['montant_ttc'] = match.group(1).replace(',', '.')
 
     result['tag_ops'] = "INT-INTERNET"
+
+    # TVA Orange : pas de TVA séparée (forfait TTC)
+    result['tva'] = None
+
     return result
 
 
@@ -180,6 +184,15 @@ def extract_engie(text: str) -> dict:
         if match:
             result['montant_ttc'] = match.group(1).replace(' ', '').replace(',', '.')
 
+    # TVA Engie : "TVA à 20,00 % calculée sur X € Y €"
+    match = re.search(r'TVA\s+à\s+[\d,\.]+\s*%\s+calcul[eé]e?\s+sur\s+[\d\s,\.]+€\s+([\d\s,\.]+)€', text, re.IGNORECASE)
+    if not match:
+        match = re.search(r'Total\s+TVA\s*\([^)]*\)\s+([\d\s,\.]+)', text, re.IGNORECASE)
+    if match:
+        result['tva'] = match.group(1).replace(' ', '').replace(',', '.')
+    else:
+        result['tva'] = None
+
     return result
 
 
@@ -250,6 +263,15 @@ def extract_endesa(text: str) -> dict:
         result['numero_compte'] = adresse_cle + '_' + ref_contrat
     else:
         result['numero_compte'] = adresse_cle
+
+    # TVA Endesa : "Montant TVA Taux TVA 20,00 % appliqué à X Eur Y Eur"
+    match = re.search(r'Montant\s+TVA\s+Taux\s+TVA\s+[\d,\.]+\s*%\s+appliqu[eé]\s+[àa]\s+[\d\s,\.]+\s+Eur\s+([\d\s,\.]+)\s+Eur', text, re.IGNORECASE)
+    if not match:
+        match = re.search(r'TVA\s+[\d,\.]+\s*%\s+[\d\s,\.]+\s+Eur\s+([\d\s,\.]+)\s+Eur', text, re.IGNORECASE)
+    if match:
+        result['tva'] = match.group(1).replace(' ', '').replace(',', '.')
+    else:
+        result['tva'] = None
 
     return result
 
@@ -409,6 +431,13 @@ def extract_totalenergies(text: str, filename: str = "") -> dict:
     # --- fragment_at ---
     if result.get('numero_facture'):
         result['fragment_at'] = result['numero_facture']
+
+    # --- TVA TotalEnergies : "Total TVA 59,36 €" ---
+    match = re.search(r'Total\s+TVA\s+([\d\s]+[,\.]\d{2})\s*€', text, re.IGNORECASE)
+    if match:
+        result['tva'] = match.group(1).replace(' ', '').replace(',', '.')
+    else:
+        result['tva'] = None
 
     return result
 
