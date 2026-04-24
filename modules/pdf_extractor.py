@@ -71,14 +71,15 @@ def extract_engie(text: str) -> dict:
     result['tag_ops'] = detect_energie(text)
 
     # --- Détection échéancier Engie ---
-    is_echeancier = (
+    # On traite les échéanciers Engie comme des factures normales (match Airtable inclus)
+    is_echeancier_engie = (
         "Echéancier N°" in text
         or "Échéancier N°" in text
         or "ECHEANCIER" in text.upper()
     )
-    result['is_echeancier'] = is_echeancier
+    result['is_echeancier'] = False  # pas de traitement spécial pour Engie
 
-    if is_echeancier:
+    if is_echeancier_engie:
         result['tag_ops'] = "GAS-GAS"
 
         # N° échéancier : "Echéancier N°\nPP912500414117"
@@ -138,8 +139,6 @@ def extract_engie(text: str) -> dict:
             mois_num = mois_map.get(mois_str, '00')
             result['date_prelevement'] = f"{jour}.{mois_num}.{annee}"
 
-        return result
-
     match_lieu = re.search(r'Lieu de consommation.*?COLONIES\s+(.*?)\s+\d{5}', text, re.IGNORECASE | re.DOTALL)
     if match_lieu and "21 RUE DE BRUXELLES" in match_lieu.group(1).upper():
         result['nature'] = "HQ"
@@ -148,33 +147,38 @@ def extract_engie(text: str) -> dict:
         result['nature'] = "OPS"
         result['is_hq'] = False
 
-    match = re.search(r'N°\s*(\d{9,15})', text)
-    if match:
-        result['numero_facture'] = match.group(1).strip()
+    if not result.get('numero_facture'):
+        match = re.search(r'N°\s*(\d{9,15})', text)
+        if match:
+            result['numero_facture'] = match.group(1).strip()
 
-    match = re.search(r'r[eé]f[eé]rence client\s*:?\s*([\d\s]+)', text, re.IGNORECASE)
-    if match:
-        ref = match.group(1).replace(' ', '').strip()[:12]
-        result['numero_compte'] = ref
-        if result.get('numero_facture'):
-            result['fragment_at'] = ref + '-' + result['numero_facture'].zfill(12)
+    if not result.get('numero_compte'):
+        match = re.search(r'r[eé]f[eé]rence client\s*:?\s*([\d\s]+)', text, re.IGNORECASE)
+        if match:
+            ref = match.group(1).replace(' ', '').strip()[:12]
+            result['numero_compte'] = ref
+
+    if not result.get('fragment_at') and result.get('numero_facture') and result.get('numero_compte'):
+        result['fragment_at'] = result['numero_compte'] + '-' + result['numero_facture'].zfill(12)
 
     mois = {
         'janvier': '01', 'février': '02', 'mars': '03', 'avril': '04',
         'mai': '05', 'juin': '06', 'juillet': '07', 'août': '08',
         'septembre': '09', 'octobre': '10', 'novembre': '11', 'décembre': '12'
     }
-    match = re.search(r'prélevé le\s+(\d{1,2})\s+(\w+)\s+(\d{4})', text, re.IGNORECASE)
-    if match:
-        jour = match.group(1).zfill(2)
-        mois_str = match.group(2).lower()
-        annee = match.group(3)
-        mois_num = mois.get(mois_str, '00')
-        result['date_prelevement'] = f"{jour}.{mois_num}.{annee}"
+    if not result.get('date_prelevement'):
+        match = re.search(r'prélevé le\s+(\d{1,2})\s+(\w+)\s+(\d{4})', text, re.IGNORECASE)
+        if match:
+            jour = match.group(1).zfill(2)
+            mois_str = match.group(2).lower()
+            annee = match.group(3)
+            mois_num = mois.get(mois_str, '00')
+            result['date_prelevement'] = f"{jour}.{mois_num}.{annee}"
 
-    match = re.search(r'total TTC\s+([\d\s]+[,\.]\d{2})', text, re.IGNORECASE)
-    if match:
-        result['montant_ttc'] = match.group(1).replace(' ', '').replace(',', '.')
+    if not result.get('montant_ttc'):
+        match = re.search(r'total TTC\s+([\d\s]+[,\.]\d{2})', text, re.IGNORECASE)
+        if match:
+            result['montant_ttc'] = match.group(1).replace(' ', '').replace(',', '.')
 
     return result
 
