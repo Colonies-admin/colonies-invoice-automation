@@ -268,10 +268,12 @@ def extract_endesa(text: str) -> dict:
     else:
         result['numero_compte'] = adresse_cle
 
-    # TVA Endesa : "Montant TVA 222,24 Eur" ou "Montant TVA Taux TVA 20,00 % appliqué à X Eur Y Eur"
-    match = re.search(r'Montant\s+TVA\s+Taux\s+TVA[\d\s,\.%]+Eur\s+([\d,\.]+)\s+Eur', text, re.IGNORECASE)
+    # TVA Endesa : "MontantTVA TauxTVA20,00%appliquéà1111,20Eur 222,24 Eur" ou "MontantTVA 222,24"
+    match = re.search(r'MontantTVA\s+TauxTVA[\d\s,\.%]+appliqu[eé][àa][\d\s,\.]+Eur\s+([\d,\.]+)\s+Eur', text, re.IGNORECASE)
     if not match:
-        match = re.search(r'Montant\s+TVA\s+([\d,\.]+)', text, re.IGNORECASE)
+        match = re.search(r'MontantTVA\s+([\d,\.]+)', text, re.IGNORECASE)
+    if not match:
+        match = re.search(r'Montant\s*TVA\s+([\d,\.]+)', text, re.IGNORECASE)
     if match:
         result['tva'] = match.group(1).replace(',', '.')
     else:
