@@ -8,7 +8,7 @@ import datetime
 print("Script démarré", flush=True)
 
 from modules.sheets_reader import get_mapping, mark_as_done, find_or_create_endesa_line, find_totalenergies_entry
-from modules.airtable_writer import find_record_by_fragment, find_record_by_client_and_amount, update_record, attach_pdf, find_supplier_record_id
+from modules.airtable_writer import find_record_by_fragment, find_record_by_client_and_amount, update_record, attach_pdf
 from modules.pdf_extractor import extract_invoice_data
 
 SHEET_ID       = os.environ.get("GOOGLE_SHEET_ID")
@@ -259,8 +259,7 @@ def process_folder(dossier: str):
                 AIRTABLE_BASE, AIRTABLE_TABLE, record_id,
                 project_code, tag_ops, nature,
                 tva=data.get('tva'),
-                vat_amount_at=vat_amount_at,
-                fournisseur=fournisseur
+                vat_amount_at=vat_amount_at
             )
             if not updated:
                 print(f"    ❌ Erreur mise à jour Airtable")
