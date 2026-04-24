@@ -120,12 +120,11 @@ def process_folder(dossier: str):
             print(f"       Prélèvement  : {data.get('date_prelevement')}")
             print(f"       TAG OPS      : {data.get('tag_ops')}")
             print(f"       Nature       : {nature}")
-            if fournisseur == "TOTALENERGIES":
-                print(f"       N° client    : {data.get('numero_client')}")
+            if fournisseur == "TOTALENERGIES" or (fournisseur == "ENGIE" and is_echeancier):
                 print(f"       Échéancier   : {is_echeancier}")
 
             # --- Onglet Sheets ---
-            if is_echeancier:
+            if is_echeancier and fournisseur == "TOTALENERGIES":
                 mois_num = str(datetime.date.today().month).zfill(2)
                 mois_str = MOIS_MAP.get(mois_num, 'INCONNU')
                 mois = f"TOTAL_{mois_str}"
@@ -156,8 +155,13 @@ def process_folder(dossier: str):
             if is_echeancier:
                 print(f"    📋 Échéancier GAZ détecté — montant mensuel {data.get('montant_ttc')}€")
                 print(f"       Pas de transaction Airtable à matcher pour un échéancier.")
-                numero_client = data.get('numero_client', '')
-                compte_info_list = find_totalenergies_entry(mapping, numero_client, tag_ops)
+                if fournisseur == "TOTALENERGIES":
+                    numero_client = data.get('numero_client', '')
+                    compte_info_list = find_totalenergies_entry(mapping, numero_client, tag_ops)
+                else:
+                    # Engie : matching par ref client (numero_compte)
+                    numero_compte = data.get('numero_compte', '')
+                    compte_info_list = mapping.get(numero_compte)
                 if compte_info_list:
                     entries = compte_info_list if isinstance(compte_info_list, list) else [compte_info_list]
                     for entry in entries:
