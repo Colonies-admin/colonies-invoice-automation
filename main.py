@@ -120,6 +120,8 @@ def process_folder(dossier: str):
             print(f"       Prélèvement  : {data.get('date_prelevement')}")
             print(f"       TAG OPS      : {data.get('tag_ops')}")
             print(f"       Nature       : {nature}")
+            if data.get('tva'):
+                print(f"       TVA          : {data.get('tva')} €")
             if fournisseur == "TOTALENERGIES" or (fournisseur == "ENGIE" and is_echeancier):
                 print(f"       Échéancier   : {is_echeancier}")
 
@@ -255,7 +257,9 @@ def process_folder(dossier: str):
             # --- Update + attach ---
             updated = update_record(
                 AIRTABLE_BASE, AIRTABLE_TABLE, record_id,
-                project_code, tag_ops, nature
+                project_code, tag_ops, nature,
+                tva=data.get('tva'),
+                vat_amount_at=None  # on récupère pas le VAT Amount pour l'instant
             )
             if not updated:
                 print(f"    ❌ Erreur mise à jour Airtable")
