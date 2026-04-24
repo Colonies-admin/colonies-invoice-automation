@@ -82,11 +82,11 @@ def extract_engie(text: str) -> dict:
     if is_echeancier_engie:
         result['tag_ops'] = "GAS-GAS"
 
-        # N° échéancier : "Echéancier N°\nPP912500414117"
-        match = re.search(r'Ech[eé]ancier\s*N°\s*\n?([A-Z0-9]+)', text, re.IGNORECASE)
+        # N° échéancier : "Echéancier N°\nPP912500414117" → on garde juste les chiffres
+        match = re.search(r'Ech[eé]ancier\s*N°\s*\n?[A-Z]*(\d+)', text, re.IGNORECASE)
         if match:
             result['numero_facture'] = match.group(1).strip()
-            result['fragment_at'] = result['numero_facture']
+            # fragment_at sera construit avec ref_client-numero_facture comme facture normale
 
         # Ref client : "Votre référence client\nCOLONIES\n300003329622"
         match = re.search(r'[Vv]otre\s+r[eé]f[eé]rence\s+client\s*\nCOLONIES\s*\n(\d+)', text)
