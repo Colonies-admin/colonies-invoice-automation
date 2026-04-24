@@ -69,7 +69,17 @@ def extract_orange(text: str) -> dict:
     if match:
         result['tva'] = match.group(1).replace(',', '.')
     else:
-        result['tva'] = None
+        # Fallback : calcul depuis "total auprès d'Orange HT TTC" ou "montant HT"
+        match_ht = re.search(r"total aupr[eè]s d'Orange\s+([\d,\.]+)\s+([\d,\.]+)", text, re.IGNORECASE)
+        if match_ht:
+            try:
+                ht = float(match_ht.group(1).replace(',', '.'))
+                ttc = float(match_ht.group(2).replace(',', '.'))
+                result['tva'] = f"{ttc - ht:.2f}"
+            except (ValueError, TypeError):
+                result['tva'] = None
+        else:
+            result['tva'] = None
 
     return result
 
