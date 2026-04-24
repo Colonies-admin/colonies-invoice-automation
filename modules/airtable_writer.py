@@ -182,3 +182,4 @@ def attach_pdf(base_id, table_id, record_id, pdf_path, filename):
     if response.status_code != 200:
         print(f"Erreur attach: {response.status_code} {response.text}")
     return response.status_code == 200
+ 
