@@ -17,36 +17,7 @@ def get_pdf_raw_url(pdf_path):
     filename = os.path.basename(pdf_path)
     return f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/pdfs_input/{filename}"
 
-SUPPLIER_MAP = {
-    "ORANGE": "Orange SA",
-    "ENGIE": "ENGIE",
-    "TOTALENERGIES": "TotalEnergies Electricite et Gaz France",
-    "ENDESA": "ENDESA ENERGIA SA SUCCURSALE FRANCE"
-}
-
-_supplier_cache = {}
-
-def find_supplier_record_id(base_id, fournisseur):
-    supplier_name = SUPPLIER_MAP.get(fournisseur.upper())
-    if not supplier_name:
-        return None
-    if supplier_name in _supplier_cache:
-        return _supplier_cache[supplier_name]
-    url = f"{AIRTABLE_API_URL}/{base_id}/Suppliers Factu Others + SRL"
-    headers = get_headers()
-    params = {
-        "filterByFormula": f'{{Name}} = "{supplier_name}"',
-        "maxRecords": 1
-    }
-    response = requests.get(url, headers=headers, params=params)
-    if response.status_code != 200:
-        return None
-    records = response.json().get("records", [])
-    if not records:
-        return None
-    record_id = records[0]["id"]
-    _supplier_cache[supplier_name] = record_id
-    return record_id
+def find_project_record_id(base_id, project_code):
     url = f"{AIRTABLE_API_URL}/{base_id}/Projects"
     headers = get_headers()
     params = {
@@ -174,7 +145,7 @@ def find_record_by_client_and_amount(base_id, table_id, numero_client, montant_t
     vat = records[0].get("fields", {}).get("VAT Amount")
     return records[0]["id"], pc, vat
 
-def update_record(base_id, table_id, record_id, project_code, tag_ops, nature, tva=None, vat_amount_at=None, fournisseur=None):
+def update_record(base_id, table_id, record_id, project_code, tag_ops, nature, tva=None, vat_amount_at=None):
     project_record_id = find_project_record_id(base_id, project_code) if project_code else None
     url = f"{AIRTABLE_API_URL}/{base_id}/{table_id}/{record_id}"
     headers = get_headers()
@@ -184,12 +155,6 @@ def update_record(base_id, table_id, record_id, project_code, tag_ops, nature, t
     }
     if project_record_id:
         fields["Project Code"] = [project_record_id]
-
-    # --- Supplier ---
-    if fournisseur:
-        supplier_id = find_supplier_record_id(base_id, fournisseur)
-        if supplier_id:
-            fields["Supplier"] = [supplier_id]
 
     # --- Check TVA ---
     if tva is not None:
