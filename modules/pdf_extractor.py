@@ -211,6 +211,9 @@ def extract_engie(text: str) -> dict:
     match = re.search(r'TVA\s+à\s+[\d,\.]+\s*%\s+calcul[eé]e?\s+sur\s+[\d\s,\.]+€\s+([\d\s,\.]+)€', text, re.IGNORECASE)
     if not match:
         match = re.search(r'Total\s+TVA\s*\([^)]*\)\s+([\d\s,\.]+)', text, re.IGNORECASE)
+    if not match:
+        # Format Entreprises & Collectivités : "20,0 % calculée sur 45,67 € 9,13 €"
+        match = re.search(r'[\d,\.]+\s*%\s+calcul[eé]e?\s+sur\s+[\d\s,\.]+\s*€\s+([\d\s,\.]+)\s*€', text, re.IGNORECASE)
     if match:
         result['tva'] = match.group(1).replace(' ', '').replace(',', '.')
     else:
