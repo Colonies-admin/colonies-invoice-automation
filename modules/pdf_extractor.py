@@ -30,7 +30,7 @@ def normalise_adresse(adresse: str) -> str:
     adresse = re.sub(r'\.\.\s*', ' ', adresse)
     adresse = adresse.split(',')[0]
     adresse = re.split(r'\s*-\s*', adresse)[0]
-    for mot in ['ATELIER', 'PAV', '1ET', '2ET', 'RDC', 'BATIMENT', 'BAT', 'LOGEMENT', '1ER']:
+    for mot in ['ATELIER', 'PAV', '1ET', '2ET', 'RDC', 'BATIMENT', 'BAT', 'LOGEMENT', '1ER', 'S300']:
         adresse = adresse.replace(mot, '')
     adresse = re.sub(r'\s+', ' ', adresse).strip()
     return adresse
@@ -295,8 +295,9 @@ def extract_endesa(text: str) -> dict:
                 result['adresse'] = adresse_norm
         else:
             # Format GAZ Endesa : "Adresse de fourniture: Site XX\nRUE... - CP VILLE France"
+            # ou "Adresse de fourniture: Site XXRUE... - CP VILLE France" (sans saut de ligne)
             match = re.search(
-                r'Adresse de fourniture\s*:[^\n]*\n([^\n]+?)\s*-\s*\d{5}\s+([^\n]+?)\s+France',
+                r'Adresse de fourniture\s*:[^\n]*?(\d+\s+[A-Z][^\n]+?)\s*-\s*\d{5}\s+([^\n]+?)\s+France',
                 text, re.IGNORECASE
             )
             if match:
