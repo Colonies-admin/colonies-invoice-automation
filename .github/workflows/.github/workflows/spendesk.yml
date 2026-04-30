@@ -1,0 +1,36 @@
+name: Process Spendesk
+on:
+  workflow_dispatch:
+    inputs:
+      dossier:
+        description: "Dossier contenant les PDFs"
+        required: true
+        default: "pdfs_input"
+        type: string
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run Spendesk script
+        run: python spendesk_attach.py ${{ inputs.dossier }}
+        env:
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+      - name: Commit PDFs traités
+        run: |
+          git config --global user.name "colonies-bot"
+          git config --global user.email "bot@livecolonies.com"
+          git add pdfs_done/ || true
+          git add pdfs_input/ || true
+          git diff --staged --quiet || git commit -m "✅ Spendesk PDFs traités"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
