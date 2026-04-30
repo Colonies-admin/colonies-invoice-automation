@@ -295,11 +295,16 @@ def extract_endesa(text: str) -> dict:
                 result['adresse'] = adresse_norm
         else:
             # Format GAZ Endesa : "Adresse de fourniture: Site XX\nRUE... - CP VILLE France"
-            # ou "Adresse de fourniture: Site XXRUE... - CP VILLE France" (sans saut de ligne)
+            # pdfplumber colle parfois "Site 12" et "46 RUE" → "Site 1246 RUE"
             match = re.search(
-                r'Adresse de fourniture\s*:[^\n]*?(\d+\s+[A-Z][^\n]+?)\s*-\s*\d{5}\s+([^\n]+?)\s+France',
+                r'Adresse de fourniture\s*:[^\n]*?Site\s*\d+\s*(\d+\s+[^\n]+?)\s*-\s*\d{5}\s+([^\n]+?)\s+France',
                 text, re.IGNORECASE
             )
+            if not match:
+                match = re.search(
+                    r'Adresse de fourniture\s*:[^\n]*?(\d+\s+[A-Z][^\n]+?)\s*-\s*\d{5}\s+([^\n]+?)\s+France',
+                    text, re.IGNORECASE
+                )
             if match:
                 adresse_norm = normalise_adresse(match.group(1).strip())
                 ville = match.group(2).strip()
