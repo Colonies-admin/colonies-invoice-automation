@@ -296,7 +296,7 @@ def extract_endesa(text: str) -> dict:
         else:
             # Format GAZ Endesa : "Adresse de fourniture: Site XX\nRUE... - CP VILLE France"
             match = re.search(
-                r'Adresse de fourniture\s*:.*?\n([^\n]+)\s*-\s*\d{5}\s+([^\n]+?)\s+France',
+                r'Adresse de fourniture\s*:[^\n]*\n([^\n]+?)\s*-\s*\d{5}\s+([^\n]+?)\s+France',
                 text, re.IGNORECASE
             )
             if match:
