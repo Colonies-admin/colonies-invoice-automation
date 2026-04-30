@@ -294,8 +294,24 @@ def extract_endesa(text: str) -> dict:
                 result['is_hq'] = False
                 result['adresse'] = adresse_norm
         else:
-            result['nature'] = "OPS"
-            result['is_hq'] = False
+            # Format GAZ Endesa : "Adresse de fourniture: Site XX\nRUE... - CP VILLE France"
+            match = re.search(
+                r'Adresse de fourniture\s*:.*?\n([^\n]+)\s*-\s*\d{5}\s+([^\n]+?)\s+France',
+                text, re.IGNORECASE
+            )
+            if match:
+                adresse_norm = normalise_adresse(match.group(1).strip())
+                ville = match.group(2).strip()
+                if "21RUEDEBRUXELLES" in adresse_norm.replace(" ", ""):
+                    result['nature'] = "HQ"
+                    result['is_hq'] = True
+                else:
+                    result['nature'] = "OPS"
+                    result['is_hq'] = False
+                    result['adresse'] = f"{adresse_norm} {ville}"
+            else:
+                result['nature'] = "OPS"
+                result['is_hq'] = False
 
     adresse = result.get('adresse', '')
     ref_contrat = result.get('ref_contrat', '')
