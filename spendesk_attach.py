@@ -71,6 +71,7 @@ def attach_files(record_id, files, folder):
     headers = get_headers()
     data = {"fields": {"Document": attachments}}
     response = requests.patch(url, headers=headers, json=data)
+    print(f"    AT response: {response.status_code} {response.text[:300]}")
     if response.status_code != 200:
         print(f"    ❌ Erreur attach: {response.status_code} {response.text}")
         return False
@@ -103,7 +104,6 @@ def main():
     errors = 0
 
     for base_key, files in groups.items():
-        # Cherche avec le nom du premier fichier complet (avec -0.pdf)
         invoice_no = files[0]
 
         print(f"\n─── {base_key}")
