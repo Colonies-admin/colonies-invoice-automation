@@ -61,7 +61,6 @@ def attach_files(record_id, files, folder):
     attachments = []
     for f in files:
         raw_url = get_raw_url(f)
-        # Vérifie que le fichier est accessible
         check = requests.get(raw_url)
         if check.status_code != 200:
             print(f"    ❌ Fichier inaccessible ({check.status_code}): {raw_url}")
@@ -104,12 +103,10 @@ def main():
     errors = 0
 
     for base_key, files in groups.items():
-        invoice_no = os.path.splitext(files[0])[0]
-        parts = invoice_no.rsplit('-', 1)
-        if len(parts) == 2 and parts[1].isdigit():
-            invoice_no = parts[0]
+        # Cherche avec le nom du premier fichier complet (avec -0.pdf)
+        invoice_no = files[0]
 
-        print(f"\n─── {invoice_no}")
+        print(f"\n─── {base_key}")
         print(f"    Fichiers : {', '.join(files)}")
 
         record_id = find_record_by_invoice(invoice_no)
