@@ -1,11 +1,11 @@
 import os
 import sys
+import base64
 import requests
 
 AIRTABLE_API_URL = "https://api.airtable.com/v0"
 BASE_ID = "appgCCvaGhmGjOaH6"
 TABLE_ID = "tblZZiXKB9LQEcq7h"
-GITHUB_TOKEN = os.environ.get("GH_PAT")
 REPO_OWNER = "Colonies-admin"
 REPO_NAME = "colonies-invoice-automation"
 
@@ -18,30 +18,16 @@ def get_headers():
     }
 
 
-def get_raw_url(filename):
-    return f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/pdfs_input/{filename}"
-
-
 def group_files_by_id(folder):
-    """
-    Regroupe les fichiers Spendesk par leur ID unique (avant le dernier tiret).
-    Ex: 4004b8d4-0.pdf et 4004b8d4-1.pdf → même groupe
-    Retourne un dict { invoice_no: [fichier1, fichier2, ...] }
-    """
     groups = {}
     for f in sorted(os.listdir(folder)):
-        # Ignore les fichiers non Spendesk (pas de pattern date en début)
         if not f[:4].isdigit():
             continue
-        # Supprime l'extension
         name = os.path.splitext(f)[0]
-        # Retire le suffixe -0, -1, -2...
         parts = name.rsplit('-', 1)
         if len(parts) == 2 and parts[1].isdigit():
-            invoice_no = name  # on garde le nom complet comme invoice_no
-            base_id_key = parts[0]  # clé de regroupement sans le -0/-1
+            base_id_key = parts[0]
         else:
-            invoice_no = name
             base_id_key = name
 
         if base_id_key not in groups:
@@ -52,7 +38,6 @@ def group_files_by_id(folder):
 
 
 def find_record_by_invoice(invoice_no):
-    """Cherche la ligne AT dont le champ 'Invoice n°' contient invoice_no."""
     url = f"{AIRTABLE_API_URL}/{BASE_ID}/{TABLE_ID}"
     headers = get_headers()
     params = {
@@ -70,24 +55,40 @@ def find_record_by_invoice(invoice_no):
 
 
 def attach_files(record_id, files, folder):
-    """Attache une liste de fichiers à un record AT."""
-    attachments = []
     for f in files:
-        raw_url = get_raw_url(f)
-        attachments.append({"url": raw_url, "filename": f})
+        filepath = os.path.join(folder, f)
+        with open(filepath, "rb") as file:
+            content = base64.standard_b64encode(file.read()).decode("utf-8")
 
-    url = f"{AIRTABLE_API_URL}/{BASE_ID}/{TABLE_ID}/{record_id}"
-    headers = get_headers()
-    data = {"fields": {"Document": attachments}}
-    response = requests.patch(url, headers=headers, json=data)
-    if response.status_code != 200:
-        print(f"    ❌ Erreur attach: {response.status_code} {response.text}")
-        return False
+        ext = os.path.splitext(f)[1].lower()
+        if ext == ".pdf":
+            content_type = "application/pdf"
+        elif ext in (".jpg", ".jpeg"):
+            content_type = "image/jpeg"
+        elif ext == ".png":
+            content_type = "image/png"
+        else:
+            content_type = "application/octet-stream"
+
+        url = f"{AIRTABLE_API_URL}/{BASE_ID}/{TABLE_ID}/{record_id}/uploadAttachment"
+        headers = {
+            "Authorization": f"Bearer {os.environ.get('AIRTABLE_TOKEN')}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "contentType": content_type,
+            "filename": f,
+            "file": content
+        }
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code not in (200, 202):
+            print(f"    ❌ Erreur upload {f}: {response.status_code} {response.text}")
+            return False
+
     return True
 
 
 def move_to_done(files, folder, done_folder):
-    """Déplace les fichiers traités vers pdfs_done/spendesk/."""
     os.makedirs(done_folder, exist_ok=True)
     for f in files:
         src = os.path.join(folder, f)
@@ -113,9 +114,7 @@ def main():
     errors = 0
 
     for base_key, files in groups.items():
-        # L'invoice_no à chercher = nom du premier fichier sans extension
         invoice_no = os.path.splitext(files[0])[0]
-        # Retire le suffixe -0
         parts = invoice_no.rsplit('-', 1)
         if len(parts) == 2 and parts[1].isdigit():
             invoice_no = parts[0]
