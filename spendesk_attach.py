@@ -1,6 +1,5 @@
 import os
 import sys
-import base64
 import requests
 
 AIRTABLE_API_URL = "https://api.airtable.com/v0"
@@ -16,6 +15,10 @@ def get_headers():
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
+
+
+def get_raw_url(filename):
+    return f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/pdfs_input/{filename}"
 
 
 def group_files_by_id(folder):
@@ -55,36 +58,23 @@ def find_record_by_invoice(invoice_no):
 
 
 def attach_files(record_id, files, folder):
+    attachments = []
     for f in files:
-        filepath = os.path.join(folder, f)
-        with open(filepath, "rb") as file:
-            content = base64.standard_b64encode(file.read()).decode("utf-8")
-
-        ext = os.path.splitext(f)[1].lower()
-        if ext == ".pdf":
-            content_type = "application/pdf"
-        elif ext in (".jpg", ".jpeg"):
-            content_type = "image/jpeg"
-        elif ext == ".png":
-            content_type = "image/png"
-        else:
-            content_type = "application/octet-stream"
-
-        url = f"{AIRTABLE_API_URL}/{BASE_ID}/{TABLE_ID}/{record_id}/uploadAttachment"
-        headers = {
-            "Authorization": f"Bearer {os.environ.get('AIRTABLE_TOKEN')}",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "contentType": content_type,
-            "filename": f,
-            "file": content
-        }
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code not in (200, 202):
-            print(f"    ❌ Erreur upload {f}: {response.status_code} {response.text}")
+        raw_url = get_raw_url(f)
+        # Vérifie que le fichier est accessible
+        check = requests.get(raw_url)
+        if check.status_code != 200:
+            print(f"    ❌ Fichier inaccessible ({check.status_code}): {raw_url}")
             return False
+        attachments.append({"url": raw_url, "filename": f})
 
+    url = f"{AIRTABLE_API_URL}/{BASE_ID}/{TABLE_ID}/{record_id}"
+    headers = get_headers()
+    data = {"fields": {"Document": attachments}}
+    response = requests.patch(url, headers=headers, json=data)
+    if response.status_code != 200:
+        print(f"    ❌ Erreur attach: {response.status_code} {response.text}")
+        return False
     return True
 
 
