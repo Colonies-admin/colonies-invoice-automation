@@ -18,7 +18,7 @@ def get_headers():
 
 
 def get_raw_url(filename):
-    return f"https://github.com/{REPO_OWNER}/{REPO_NAME}/raw/main/pdfs_input/{filename}"
+    return f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/pdfs_input/{filename}"
 
 
 def group_files_by_id(folder):
@@ -61,17 +61,12 @@ def attach_files(record_id, files, folder):
     attachments = []
     for f in files:
         raw_url = get_raw_url(f)
-        check = requests.get(raw_url, allow_redirects=True)
-        if check.status_code != 200:
-            print(f"    ❌ Fichier inaccessible ({check.status_code}): {raw_url}")
-            return False
         attachments.append({"url": raw_url, "filename": f})
 
     url = f"{AIRTABLE_API_URL}/{BASE_ID}/{TABLE_ID}/{record_id}"
     headers = get_headers()
     data = {"fields": {"Document": attachments}}
     response = requests.patch(url, headers=headers, json=data)
-    print(f"    AT response: {response.status_code} {response.text[:300]}")
     if response.status_code != 200:
         print(f"    ❌ Erreur attach: {response.status_code} {response.text}")
         return False
