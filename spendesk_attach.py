@@ -99,20 +99,42 @@ def main():
     errors = 0
 
     for base_key, files in groups.items():
-        invoice_no = files[0]
-
         print(f"\n─── {base_key}")
         print(f"    Fichiers : {', '.join(files)}")
 
+        # Essai 1 : nom complet avec extension originale
+        invoice_no = files[0]
         record_id = find_record_by_invoice(invoice_no)
+
+        # Essai 2 : même nom mais avec .jpg
         if not record_id:
-            print(f"    ⚠️  Invoice n° '{invoice_no}' non trouvé dans AT — skipped")
+            invoice_no_jpg = os.path.splitext(files[0])[0] + ".jpg"
+            record_id = find_record_by_invoice(invoice_no_jpg)
+            if record_id:
+                invoice_no = invoice_no_jpg
+
+        # Essai 3 : même nom mais avec .jpeg
+        if not record_id:
+            invoice_no_jpeg = os.path.splitext(files[0])[0] + ".jpeg"
+            record_id = find_record_by_invoice(invoice_no_jpeg)
+            if record_id:
+                invoice_no = invoice_no_jpeg
+
+        # Essai 4 : même nom mais avec .pdf
+        if not record_id:
+            invoice_no_pdf = os.path.splitext(files[0])[0] + ".pdf"
+            record_id = find_record_by_invoice(invoice_no_pdf)
+            if record_id:
+                invoice_no = invoice_no_pdf
+
+        if not record_id:
+            print(f"    ⚠️  Invoice n° '{files[0]}' non trouvé dans AT — skipped")
             errors += 1
             continue
 
         success = attach_files(record_id, files, folder)
         if success:
-            print(f"    ✅ PDF(s) attaché(s) → record {record_id}")
+            print(f"    ✅ attaché(s) → record {record_id} (matched: {invoice_no})")
             move_to_done(files, folder, done_folder)
             ok += 1
         else:
