@@ -28,7 +28,17 @@ FOURNISSEUR_ONGLET = {
 
 def get_onglet(fournisseur: str, date_prelevement: str) -> str:
     try:
-        mois_num = date_prelevement.split('.')[1]
+        parts = date_prelevement.split('.')
+        jour = int(parts[0])
+        mois_num = parts[1]
+        annee = int(parts[2])
+
+        # Pour ENDESA : si prélèvement le 28+ du mois, le débit passe le mois suivant
+        if fournisseur == "ENDESA" and jour >= 28:
+            date = datetime.date(annee, int(mois_num), jour)
+            date_suivante = date + datetime.timedelta(days=3)
+            mois_num = str(date_suivante.month).zfill(2)
+
         mois_str = MOIS_MAP.get(mois_num, 'INCONNU')
         prefix = FOURNISSEUR_ONGLET.get(fournisseur, fournisseur)
         return f"{prefix}_{mois_str}"
@@ -42,11 +52,6 @@ def get_done_folder(fournisseur: str, mois: str) -> str:
 
 
 def mark_status(compte_info, project_code_at, sheet_id, mois, adresse_conso=""):
-    """
-    Coche le STATUS dans le Sheets.
-    Utilise l'adresse de consommation pour identifier la bonne ligne
-    quand plusieurs lignes ont le même N° client et type.
-    """
     if not compte_info:
         return
 
@@ -56,7 +61,6 @@ def mark_status(compte_info, project_code_at, sheet_id, mois, adresse_conso=""):
 
     entry_to_mark = None
 
-    # 1. Essaie par adresse conso (plus fiable)
     if adresse_conso:
         adresse_key = adresse_conso.upper().replace(" ", "")
         for e in compte_info:
@@ -67,7 +71,6 @@ def mark_status(compte_info, project_code_at, sheet_id, mois, adresse_conso=""):
                     entry_to_mark = e
                     break
 
-    # 2. Essaie par project code Airtable
     if not entry_to_mark and project_code_at:
         for e in compte_info:
             if not e.get('_used') and e.get('code_projet', '').upper() == project_code_at.upper():
@@ -75,7 +78,6 @@ def mark_status(compte_info, project_code_at, sheet_id, mois, adresse_conso=""):
                 entry_to_mark = e
                 break
 
-    # 3. Fallback : première non utilisée
     if not entry_to_mark:
         for e in compte_info:
             if not e.get('_used'):
@@ -161,7 +163,6 @@ def process_folder(dossier: str):
                     numero_client = data.get('numero_client', '')
                     compte_info_list = find_totalenergies_entry(mapping, numero_client, tag_ops)
                 else:
-                    # Engie : matching par ref client (numero_compte)
                     numero_compte = data.get('numero_compte', '')
                     compte_info_list = mapping.get(numero_compte)
                 if compte_info_list:
@@ -189,7 +190,6 @@ def process_folder(dossier: str):
                     continue
                 if compte_info:
                     if isinstance(compte_info, list):
-                        # Cherche la bonne entrée par adresse conso
                         best_entry = None
                         if adresse_conso_pdf:
                             for e in compte_info:
@@ -216,7 +216,6 @@ def process_folder(dossier: str):
                 print(f"       Project code : {project_code}")
 
             else:
-                # Orange / Engie
                 numero_compte = data.get("numero_compte", "")
                 compte_info = mapping.get(numero_compte)
                 if not compte_info and not is_hq:
@@ -276,7 +275,6 @@ def process_folder(dossier: str):
                 print(f"    ⚠️  Mis à jour mais PDF non attaché")
 
             # --- STATUS Sheets ---
-            # Pour HQ sans compte_info, cherche quand même dans le mapping
             if is_hq and not compte_info and fournisseur == "TOTALENERGIES":
                 numero_client = data.get('numero_client', '')
                 compte_info = find_totalenergies_entry(mapping, numero_client, tag_ops)
@@ -312,4 +310,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     process_folder(args.dossier)
- 
